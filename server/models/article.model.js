@@ -1,0 +1,54 @@
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("@/database/sequelize");
+
+const Article = sequelize.define(
+  "Article",
+  {
+    authorId: {
+      // Who wrote the article
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    title: {
+      // Title of the article
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    featured: {
+      // Is the article featured?
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    banner: {
+      // URL of the banner image
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    content: {
+      // Main content of the article
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    tempId: {
+      // Temporary ID for associating images before article creation
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    price: {
+      type: DataTypes.DECIMAL(10, 2), // ej: 99999999.99
+      allowNull: false,
+      defaultValue: 0,
+    },
+    stock: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+module.exports = { Article };
