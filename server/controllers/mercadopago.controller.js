@@ -1,34 +1,24 @@
-/* 
-const { createPreference } = require("../services/mercadopago.service");
+const mpService = require("@/services/mercadopago.service");
 
-const createPreferenceController = async (req, res) => {
+
+const createPreference = async (req, res) => {
   try {
-    // Extraer items del body
-    const { items } = req.body;
-    
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        error: "Items are required and must be a non-empty array"
-      });
-    }
-    
-    // Crear preferencia con los items
-    const preference = await createPreference(items);
-    
-    res.status(200).json({
-      id: preference.id,
-      init_point: preference.init_point,
-      sandbox_init_point: preference.sandbox_init_point,
+    const data = await mpService.createPreference({
+      items: req.body.items,
+      external_reference: req.body.external_reference,
     });
+
+    return res.status(200).json(data);
   } catch (error) {
     console.error("MP controller error:", error.message);
-    res.status(500).json({
-      error: error.message,
+
+    return res.status(500).json({
+      error: "Error creando preference",
+      details: error.response?.data || error.message,
     });
   }
 };
 
 module.exports = {
-  createPreferenceController,
+  createPreference,
 };
-*/

@@ -1,15 +1,19 @@
+/*
+* ========================================================================================
+* ⚠️ This file's code was generated partially or completely by a Large Language Model (LLM).
+* ========================================================================================
+*/
+
 const { Order, OrderItem, Article } = require("@/models");
 const { sequelize } = require("@/database/sequelize");
-//const { createPreference } = require("@/services/mercadopago.service");
-const axios = require("axios");
-
-const MP_PROXY_URL = process.env.PY_MP_URL || "http://localhost:8000";
+const { createPreference } = require("@/services/mercadopago.service");
 
 /**
  * Crear una orden con transacción atómica
  */
 const createOrder = async (data, userId) => {
   const transaction = await sequelize.transaction();
+
   try {
     const { items, paymentMethod } = data;
 
@@ -27,7 +31,7 @@ const createOrder = async (data, userId) => {
     const allowedMethods = ["mercadopago", "cash"];
     if (!paymentMethod || !allowedMethods.includes(paymentMethod)) {
       throw new Error(
-        `Invalid payment method. Allowed: ${allowedMethods.join(", ")}`,
+        `Invalid payment method. Allowed: ${allowedMethods.join(", ")}`
       );
     }
 
@@ -39,6 +43,7 @@ const createOrder = async (data, userId) => {
       where: { id: productIds },
       attributes: ["id", "title", "price", "stock"],
       transaction,
+      lock: transaction.LOCK.UPDATE, // 🔒 Lock pesimista para evitar race conditions
     });
 
     // Crear mapa para acceso rápido
@@ -51,19 +56,18 @@ const createOrder = async (data, userId) => {
       }
 
       const productFromDB = productMap.get(item.productId);
-
       if (!productFromDB) {
         throw new Error(`Product with ID ${item.productId} not found`);
       }
 
-      // Validar stock disponible (opcional pero recomendado)
+      // Validar stock disponible
       if (productFromDB.stock < item.quantity) {
         throw new Error(
           `Insufficient stock for ${productFromDB.title}. Available: ${productFromDB.stock}, requested: ${item.quantity}`
         );
       }
 
-      // 🔒 IMPORTANTE: Parsear el price que viene como string desde DECIMAL
+      // Parsear el price que viene como string desde DECIMAL
       const dbPrice = parseFloat(productFromDB.price);
 
       return {
@@ -74,31 +78,45 @@ const createOrder = async (data, userId) => {
       };
     });
 
+    //DECREMENTAR STOCK (reserva)
+    for (const item of validatedItems) {
+      const product = productMap.get(item.productId);
+      await product.decrement('stock', {
+        by: item.quantity,
+        transaction
+      });
+      console.log(`📦 Stock reservado: ${product.title} - Cantidad: ${item.quantity}`);
+    }
+
     // Calcular total con precios validados
     const totalAmount = validatedItems.reduce((sum, item) => {
       return sum + item.unitPrice * item.quantity;
     }, 0);
 
-    console.log("💰 Total calculado:", totalAmount); // Debug
+    console.log("💰 Total calculado:", totalAmount);
 
     if (totalAmount <= 0) {
       throw new Error("Order total must be greater than 0");
     }
-    // ========================================================================
 
+    // ========================================================================
     // Crear la orden
+    // ========================================================================
     const order = await Order.create(
       {
         userId,
         totalAmount: parseFloat(totalAmount.toFixed(2)),
         paymentMethod,
+        // 🔑 DIFERENCIA CLAVE:
+        // - cash: unpaid (requiere confirmación manual)
+        // - mercadopago: pending (se confirmará automáticamente vía webhook)
         paymentStatus: paymentMethod === "cash" ? "unpaid" : "pending",
         orderStatus: "created",
       },
-      { transaction },
+      { transaction }
     );
 
-    // Usar validatedItems en lugar de items originales
+    // Crear OrderItems
     const orderItems = validatedItems.map((item) => ({
       orderId: order.id,
       productId: item.productId,
@@ -108,30 +126,27 @@ const createOrder = async (data, userId) => {
     }));
 
     await OrderItem.bulkCreate(orderItems, { transaction });
-    await transaction.commit();
 
-    const createdOrder = await Order.findByPk(order.id, {
-      include: [{ model: OrderItem, as: "items" }],
-    });
-
-    // MercadoPago - Usar validatedItems
+    // ========================================================================
+    // 🔒 MercadoPago - SOLO si el método de pago es mercadopago
+    // ========================================================================
     let mercadopagoData = null;
+
     if (paymentMethod === "mercadopago") {
       try {
+        // Preparar items para MercadoPago con precios validados de la DB
         const mpItems = validatedItems.map((item) => ({
           title: item.title,
           quantity: item.quantity,
-          unit_price: item.unitPrice,
+          unit_price: item.unitPrice, // ✅ Precio validado desde DB
           currency_id: "ARS",
         }));
 
-        const { data: preference } = await axios.post(
-          `${MP_PROXY_URL}/mp/preference`,
-          {
-            items: mpItems,
-            external_reference: String(order.id),
-          },
-        );
+        // ✅ Llamar al servicio de MercadoPago directamente (Node.js)
+        const preference = await createPreference({
+          items: mpItems,
+          external_reference: String(order.id),
+        });
 
         mercadopagoData = {
           preferenceId: preference.id,
@@ -139,25 +154,39 @@ const createOrder = async (data, userId) => {
           sandbox_init_point: preference.sandbox_init_point,
         };
 
-        await createdOrder.update({
-          mercadopagoPreferenceId: preference.id,
-        });
+        // Actualizar orden con el preferenceId
+        await order.update(
+          { mercadopagoPreferenceId: preference.id },
+          { transaction }
+        );
+
       } catch (mpError) {
-        console.error("Error creating MercadoPago preference:", mpError);
-        await createdOrder.update({
-          orderStatus: "cancelled",
-          paymentStatus: "failed",
-        });
+        console.error("❌ Error creating MercadoPago preference:", mpError);
+
+        // Rollback de la transacción si falla MercadoPago
+        await transaction.rollback();
+
         throw new Error(
-          `Order created but MercadoPago preference failed: ${mpError.message}`,
+          `Order creation failed: ${mpError.message}`
         );
       }
     }
+
+    // ========================================================================
+    // Commit de la transacción
+    // ========================================================================
+    await transaction.commit();
+
+    // Obtener orden completa con items
+    const createdOrder = await Order.findByPk(order.id, {
+      include: [{ model: OrderItem, as: "items" }],
+    });
 
     return {
       ...createdOrder.toJSON(),
       mercadopago: mercadopagoData,
     };
+
   } catch (error) {
     if (transaction && !transaction.finished) {
       await transaction.rollback();
@@ -202,7 +231,6 @@ const getOrderById = async (orderId, userId = null) => {
     }
 
     const where = { id: orderId };
-
     if (userId) {
       where.userId = userId;
     }
@@ -291,18 +319,22 @@ const getOrderByPaymentId = async (paymentId) => {
 const updateOrderPaymentStatus = async (
   orderId,
   paymentStatus,
-  paymentId = null,
+  paymentId = null
 ) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const validStatuses = ["unpaid", "pending", "paid", "failed", "refunded"];
-
     if (!validStatuses.includes(paymentStatus)) {
       throw new Error(
-        `Invalid payment status. Allowed: ${validStatuses.join(", ")}`,
+        `Invalid payment status. Allowed: ${validStatuses.join(", ")}`
       );
     }
 
-    const order = await Order.findByPk(orderId);
+    const order = await Order.findByPk(orderId, {
+      include: [{ model: OrderItem, as: "items" }],
+      transaction,
+    });
 
     if (!order) {
       throw new Error("Order not found");
@@ -323,18 +355,62 @@ const updateOrderPaymentStatus = async (
       throw new Error("Only paid orders can be refunded");
     }
 
+    // ========================================================================
+    // 🔄 GESTIÓN DE STOCK SEGÚN CAMBIO DE ESTADO
+    // ========================================================================
+
+    // Caso 1: Pago exitoso (pending/unpaid → paid)
+    // El stock ya está reservado, solo confirmamos
+    if (paymentStatus === "paid" && ["pending", "unpaid"].includes(currentStatus)) {
+      console.log("✅ Pago confirmado - Stock ya estaba reservado");
+      // No hacemos nada con el stock, ya fue decrementado al crear
+    }
+
+    // Caso 2: Pago fallido (pending/unpaid → failed)
+    // DEVOLVER el stock reservado
+    if (paymentStatus === "failed" && ["pending", "unpaid"].includes(currentStatus)) {
+      console.log("❌ Pago fallido - Devolviendo stock");
+
+      for (const item of order.items) {
+        await Article.increment('stock', {
+          by: item.quantity,
+          where: { id: item.productId },
+          transaction
+        });
+        console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
+      }
+    }
+
+    // Caso 3: Reembolso (paid → refunded)
+    // DEVOLVER el stock
+    if (paymentStatus === "refunded" && currentStatus === "paid") {
+      console.log("💸 Reembolso - Devolviendo stock");
+
+      for (const item of order.items) {
+        await Article.increment('stock', {
+          by: item.quantity,
+          where: { id: item.productId },
+          transaction
+        });
+        console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
+      }
+    }
+
     // Preparar datos de actualización
     const updateData = { paymentStatus };
 
-    // Si se proporciona paymentId, guardarlo
     if (paymentId) {
       updateData.mercadopagoPaymentId = paymentId;
     }
 
-    await order.update(updateData);
+    await order.update(updateData, { transaction });
+    await transaction.commit();
 
     return order;
   } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
     throw new Error(`Error updating order payment status: ${error.message}`);
   }
 };
@@ -345,15 +421,13 @@ const updateOrderPaymentStatus = async (
 const updateOrderStatus = async (orderId, orderStatus) => {
   try {
     const validStatuses = ["created", "cancelled", "shipped", "delivered"];
-
     if (!validStatuses.includes(orderStatus)) {
       throw new Error(
-        `Invalid order status. Allowed: ${validStatuses.join(", ")}`,
+        `Invalid order status. Allowed: ${validStatuses.join(", ")}`
       );
     }
 
     const order = await Order.findByPk(orderId);
-
     if (!order) {
       throw new Error("Order not found");
     }
@@ -367,7 +441,6 @@ const updateOrderStatus = async (orderId, orderStatus) => {
     }
 
     await order.update({ orderStatus });
-
     return order;
   } catch (error) {
     throw new Error(`Error updating order status: ${error.message}`);
@@ -378,14 +451,19 @@ const updateOrderStatus = async (orderId, orderStatus) => {
  * Cancelar una orden
  */
 const cancelOrder = async (orderId, userId = null) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const where = { id: orderId };
-
     if (userId) {
       where.userId = userId;
     }
 
-    const order = await Order.findOne({ where });
+    const order = await Order.findOne({
+      where,
+      include: [{ model: OrderItem, as: "items" }],
+      transaction,
+    });
 
     if (!order) {
       throw new Error("Order not found");
@@ -403,13 +481,32 @@ const cancelOrder = async (orderId, userId = null) => {
       throw new Error("Cannot cancel a delivered order");
     }
 
+    // ========================================================================
+    // 📦 DEVOLVER STOCK al cancelar
+    // ========================================================================
+    console.log("🚫 Cancelando orden - Devolviendo stock");
+
+    for (const item of order.items) {
+      await Article.increment('stock', {
+        by: item.quantity,
+        where: { id: item.productId },
+        transaction
+      });
+      console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
+    }
+
     await order.update({
       orderStatus: "cancelled",
       paymentStatus: "failed",
-    });
+    }, { transaction });
+
+    await transaction.commit();
 
     return order;
   } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
     throw new Error(`Error cancelling order: ${error.message}`);
   }
 };

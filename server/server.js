@@ -2,6 +2,8 @@ require("dotenv").config();
 require("module-alias/register");
 
 require('@/tasks/cleanupImages'); // Import the cleanup task
+require('@/tasks/releaseExpiredOrders'); 
+
 const { User } = require("@/models/index"); // Import User model
 
 const app = require("./app");
@@ -32,7 +34,9 @@ const URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
       console.log("ℹ️  Admin user already exists");
     }
     app.listen(PORT, () =>
-      console.log(`🚀 Server is running at ${URL || `http://localhost:${PORT}`}`)
+      /*console.log(`🚀 Server is running at ${URL || `http://localhost:${PORT}`}`)*/
+      console.log(`🚀 Server is running at ${`http://localhost:${PORT}`}`)
+
     );
   } catch (error) {
     console.error("💥 The server failed to start:", error);

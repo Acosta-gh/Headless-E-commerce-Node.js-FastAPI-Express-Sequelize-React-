@@ -1,6 +1,6 @@
 import httpx
 from fastapi import APIRouter, Request
-from app.services.mercadopago_service import create_preference, get_payment_by_id
+from app.services.mercadopago_service import get_payment_by_id
 import os
 
 # ======================================================================
@@ -12,28 +12,6 @@ router = APIRouter(prefix="/mp", tags=["MercadoPago"])
 # 🌐 Backend principal (Node.js)
 # ======================================================================
 NODE_API_URL = os.getenv("NODE_API_URL", "http://localhost:3001/api/v1")
-
-# ======================================================================
-# 💳 Crear payment preference
-# ======================================================================
-@router.post("/preference")
-async def create_preference_endpoint(req: Request):
-    body = await req.json()
-    items = body.get("items", [
-        {
-            "title": "Mi producto",
-            "quantity": 1,
-            "unit_price": 1000,
-        }
-    ])
-    external_reference = body.get("external_reference")
-    pref = create_preference(items=items, external_reference=external_reference)
-    return {
-        "id": pref["id"],
-        "init_point": pref["init_point"],
-        "sandbox_init_point": pref.get("sandbox_init_point"),
-    }
-
 
 # ======================================================================
 # 📡 Mercado Pago Webhook

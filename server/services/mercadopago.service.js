@@ -1,58 +1,55 @@
-const { Preference, Payment } = require("mercadopago");
-const mpClient = require("../config/mercadopago");
+/*
+* ========================================================================================
+* ⚠️ This file's code was generated partially or completely by a Large Language Model (LLM).
+* ========================================================================================
+*/
 
-const preference = new Preference(mpClient);
-const paymentClient = new Payment(mpClient);
+const { Preference } = require('mercadopago');
+const client = require("@/config/mercadopago");
 
-const getPaymentById = async (paymentId) => {
-  const response = await paymentClient.get({ id: paymentId });
-  return response;
-};
-
-const createPreference = async (items, orderId = null) => {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("Items must be a non-empty array");
+const createPreference = async ({ items, external_reference }) => {
+  if (!external_reference) {
+    throw new Error("external_reference is required");
+  }
+  
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new Error("items are required");
   }
 
-  items.forEach((item, index) => {
-    if (!item.title || !item.quantity || !item.unit_price) {
-      throw new Error(
-        `Item at index ${index} is missing required fields (title, quantity, unit_price)`
-      );
-    }
-  });
-
-  const preferenceData = {
-    items: items,
-    notification_url: process.env.MP_WEBHOOK_URL,
-    back_urls: {
-      success: process.env.MP_BACK_URL_SUCCESS,
-      failure: process.env.MP_BACK_URL_FAILURE,
-      pending: process.env.MP_BACK_URL_PENDING,
-    },
-    auto_return: "approved",
-  };
-
-  // Si se proporciona orderId, agregarlo como referencia externa
-  if (orderId) {
-    preferenceData.external_reference = String(orderId);
-    preferenceData.metadata = {
-      order_id: orderId,
+  try {
+    const preference = new Preference(client);
+    
+    const body = {
+      items: items.map(item => ({
+        title: item.title,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        currency_id: item.currency_id || 'ARS'
+      })),
+      external_reference,
+      notification_url: process.env.MP_WEBHOOK_URL,
+      back_urls: {
+        success: process.env.MP_SUCCESS_URL || `${process.env.FRONTEND_URL}/payment/success`,
+        failure: process.env.MP_FAILURE_URL || `${process.env.FRONTEND_URL}/payment/failure`,
+        pending: process.env.MP_PENDING_URL || `${process.env.FRONTEND_URL}/payment/pending`
+      },
+      auto_return: 'approved',
+      statement_descriptor: 'TU_TIENDA'
     };
+
+    const response = await preference.create({ body });
+    
+    return {
+      id: response.id,
+      init_point: response.init_point,
+      sandbox_init_point: response.sandbox_init_point,
+    };
+  } catch (error) {
+    console.error('Mercado Pago API Error:', error);
+    throw new Error(`Mercado Pago error: ${error.message}`);
   }
-
-  const response = await preference.create({
-    body: preferenceData,
-  });
-
-  if (!response || !response.id) {
-    throw new Error("MercadoPago did not return preference");
-  }
-
-  return response;
 };
 
 module.exports = {
-  getPaymentById,
   createPreference,
 };
