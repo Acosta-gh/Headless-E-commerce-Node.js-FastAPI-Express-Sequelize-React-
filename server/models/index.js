@@ -9,6 +9,7 @@ const { Subscriber } = require('@/models/subscriber.model');
 const { Token } = require('@/models/token.model');
 const { Order } = require('@/models/order.model');
 const { OrderItem } = require('@/models/orderItem.model');
+const { PaymentMethod } = require('@/models/paymentMethod.model');
 
 // =====================
 // Subscriber ↔ Token
@@ -147,6 +148,23 @@ OrderItem.belongsTo(Article, {
   onUpdate: 'CASCADE'
 });
 
+// =====================
+// Order ↔ PaymentMethod
+// =====================
+Order.belongsTo(PaymentMethod, {
+  foreignKey: 'paymentMethodId',
+  as: 'payment', 
+  onDelete: 'RESTRICT', 
+  onUpdate: 'CASCADE'
+});
+
+PaymentMethod.hasMany(Order, {
+  foreignKey: 'paymentMethodId',
+  as: 'orders',
+  onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE'
+});
+
 module.exports = {
   Article,
   User,
@@ -158,5 +176,6 @@ module.exports = {
   Subscriber,
   Token,
   Order,
-  OrderItem
+  OrderItem,
+  PaymentMethod
 };

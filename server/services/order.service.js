@@ -4,9 +4,26 @@
 * ========================================================================================
 */
 
-const { Order, OrderItem, Article } = require("@/models");
+const { Order, OrderItem, Article, PaymentMethod } = require("@/models");
 const { sequelize } = require("@/database/sequelize");
 const { createPreference } = require("@/services/mercadopago.service");
+
+
+/**
+ * Helper para devolver stock al inventario
+ */
+const restoreStock = async (items, transaction, reason) => {
+  console.log(`${reason} - Devolviendo stock`); // ✅ Corregí el error de sintaxis
+  for (const item of items) {
+    await Article.increment('stock', {
+      by: item.quantity,
+      where: { id: item.productId },
+      transaction
+    });
+    console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`); // ✅ Corregí el error de sintaxis
+  }
+};
+
 
 /**
  * Crear una orden con transacción atómica
@@ -15,7 +32,7 @@ const createOrder = async (data, userId) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const { items, paymentMethod } = data;
+    const { items, paymentMethodCode } = data;
 
     // Validación de userId
     if (!userId) {
@@ -28,22 +45,25 @@ const createOrder = async (data, userId) => {
     }
 
     // Validación de método de pago
-    const allowedMethods = ["mercadopago", "cash"];
-    if (!paymentMethod || !allowedMethods.includes(paymentMethod)) {
-      throw new Error(
-        `Invalid payment method. Allowed: ${allowedMethods.join(", ")}`
-      );
+    const paymentMethod = await PaymentMethod.findOne({
+      where: {
+        code: paymentMethodCode,
+        enabled: true
+      },
+      transaction
+    });
+
+    if (!paymentMethod) {
+      throw new Error("Invalid or disabled payment method");
     }
 
-    // ========================================================================
-    // 🔒 Validar precios contra la base de datos
-    // ========================================================================
+    // Validar productos y stock
     const productIds = items.map((item) => item.productId);
     const productsFromDB = await Article.findAll({
       where: { id: productIds },
       attributes: ["id", "title", "price", "stock"],
       transaction,
-      lock: transaction.LOCK.UPDATE, // 🔒 Lock pesimista para evitar race conditions
+      lock: transaction.LOCK.UPDATE,
     });
 
     // Crear mapa para acceso rápido
@@ -88,12 +108,18 @@ const createOrder = async (data, userId) => {
       console.log(`📦 Stock reservado: ${product.title} - Cantidad: ${item.quantity}`);
     }
 
-    // Calcular total con precios validados
-    const totalAmount = validatedItems.reduce((sum, item) => {
+    const subtotal = validatedItems.reduce((sum, item) => {
       return sum + item.unitPrice * item.quantity;
     }, 0);
 
-    console.log("💰 Total calculado:", totalAmount);
+    const discountAmount = (subtotal * parseFloat(paymentMethod.discountPercentage)) / 100;
+    const surchargeAmount = (subtotal * parseFloat(paymentMethod.surchargePercentage)) / 100;
+    const totalAmount = subtotal - discountAmount + surchargeAmount;
+
+    console.log("💰 Subtotal:", subtotal);
+    console.log("🎁 Descuento:", discountAmount, `(${paymentMethod.discountPercentage}%)`);
+    console.log("💳 Recargo:", surchargeAmount, `(${paymentMethod.surchargePercentage}%)`);
+    console.log("💰 Total final:", totalAmount);
 
     if (totalAmount <= 0) {
       throw new Error("Order total must be greater than 0");
@@ -106,11 +132,12 @@ const createOrder = async (data, userId) => {
       {
         userId,
         totalAmount: parseFloat(totalAmount.toFixed(2)),
-        paymentMethod,
-        // 🔑 DIFERENCIA CLAVE:
-        // - cash: unpaid (requiere confirmación manual)
-        // - mercadopago: pending (se confirmará automáticamente vía webhook)
-        paymentStatus: paymentMethod === "cash" ? "unpaid" : "pending",
+        paymentMethodId: paymentMethod.id,
+        // - cash/bank_transfer: unpaid (requiere confirmación manual)
+        // - mercadopago: pending (se confirmará automáticamen  te vía webhook)
+        paymentStatus: (paymentMethod.code === "cash" || paymentMethod.code === "bank_transfer")
+          ? "unpaid"
+          : "pending",
         orderStatus: "created",
       },
       { transaction }
@@ -128,11 +155,11 @@ const createOrder = async (data, userId) => {
     await OrderItem.bulkCreate(orderItems, { transaction });
 
     // ========================================================================
-    // 🔒 MercadoPago - SOLO si el método de pago es mercadopago
+    // MercadoPago - Si el método de pago es mercadopago
     // ========================================================================
     let mercadopagoData = null;
 
-    if (paymentMethod === "mercadopago") {
+    if (paymentMethod.code === "mercadopago") {
       try {
         // Preparar items para MercadoPago con precios validados de la DB
         const mpItems = validatedItems.map((item) => ({
@@ -179,7 +206,17 @@ const createOrder = async (data, userId) => {
 
     // Obtener orden completa con items
     const createdOrder = await Order.findByPk(order.id, {
-      include: [{ model: OrderItem, as: "items" }],
+      include: [
+        {
+          model: OrderItem,
+          as: "items"
+        },
+        {
+          model: PaymentMethod,
+          as: "payment",
+          attributes: ['id', 'code', 'name', 'discountPercentage', 'surchargePercentage']
+        }
+      ],
     });
 
     return {
@@ -356,45 +393,24 @@ const updateOrderPaymentStatus = async (
     }
 
     // ========================================================================
-    // 🔄 GESTIÓN DE STOCK SEGÚN CAMBIO DE ESTADO
+    // Gestion de stock segun cambio de estado
     // ========================================================================
 
     // Caso 1: Pago exitoso (pending/unpaid → paid)
-    // El stock ya está reservado, solo confirmamos
     if (paymentStatus === "paid" && ["pending", "unpaid"].includes(currentStatus)) {
       console.log("✅ Pago confirmado - Stock ya estaba reservado");
-      // No hacemos nada con el stock, ya fue decrementado al crear
     }
 
     // Caso 2: Pago fallido (pending/unpaid → failed)
-    // DEVOLVER el stock reservado
     if (paymentStatus === "failed" && ["pending", "unpaid"].includes(currentStatus)) {
-      console.log("❌ Pago fallido - Devolviendo stock");
-
-      for (const item of order.items) {
-        await Article.increment('stock', {
-          by: item.quantity,
-          where: { id: item.productId },
-          transaction
-        });
-        console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
-      }
+      await restoreStock(order.items, transaction, "❌ Pago fallido");
     }
 
     // Caso 3: Reembolso (paid → refunded)
-    // DEVOLVER el stock
     if (paymentStatus === "refunded" && currentStatus === "paid") {
-      console.log("💸 Reembolso - Devolviendo stock");
-
-      for (const item of order.items) {
-        await Article.increment('stock', {
-          by: item.quantity,
-          where: { id: item.productId },
-          transaction
-        });
-        console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
-      }
+      await restoreStock(order.items, transaction, "💸 Reembolso");
     }
+
 
     // Preparar datos de actualización
     const updateData = { paymentStatus };
@@ -482,18 +498,11 @@ const cancelOrder = async (orderId, userId = null) => {
     }
 
     // ========================================================================
-    // 📦 DEVOLVER STOCK al cancelar
+    // Devolver stock al cancelar al cancelar
     // ========================================================================
     console.log("🚫 Cancelando orden - Devolviendo stock");
 
-    for (const item of order.items) {
-      await Article.increment('stock', {
-        by: item.quantity,
-        where: { id: item.productId },
-        transaction
-      });
-      console.log(`📦 Stock devuelto: ${item.title} - Cantidad: ${item.quantity}`);
-    }
+    await restoreStock(order.items, transaction, "🚫 Cancelando orden");
 
     await order.update({
       orderStatus: "cancelled",

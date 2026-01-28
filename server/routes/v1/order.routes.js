@@ -1,29 +1,30 @@
 const express = require("express");
 const router = express.Router();
 
-// ======================================================================
-//                          🔐  Middleware
-// ======================================================================
 const { genericLimiter } = require("@/middlewares/rateLimit.middleware");
 const { verifyJWT } = require("@/middlewares/verifyJWT.middleware");
+const { isAdmin } = require("@/middlewares/isAdmin.middleware");
+const { verifyWebhookSecret } = require("@/middlewares/verifyWebhookSecret.middleware");
 
-// ======================================================================
-//                       Controllers
-// ======================================================================
 const {
   createOrder,
   getOrdersByUserId,
-  updatePaymentStatus,
+  updatePaymentFromWebhook,
+  updatePaymentManually,
+  updateOrderStatusManually
 } = require("@/controllers/order.controller");
 
-// ======================================================================
-//                          🗞️ Order Routes
-// ======================================================================
 router.post("/", verifyJWT, genericLimiter, createOrder);
 router.get("/", verifyJWT, genericLimiter, getOrdersByUserId);
 
-// Endpoint interno para actualizar estado desde Python webhook
-// No requiere JWT porque viene desde tu servicio de Python
-router.patch("/:orderId/payment-status", updatePaymentStatus);
+// Debug middleware para webhook
+router.patch(
+  "/:orderId/payment/webhook",
+  verifyWebhookSecret,
+  updatePaymentFromWebhook
+);
+
+router.patch("/:orderId/payment", verifyJWT, isAdmin, updatePaymentManually);
+router.patch("/:orderId/status", verifyJWT, isAdmin, updateOrderStatusManually);
 
 module.exports = router;

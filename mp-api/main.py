@@ -16,7 +16,7 @@
 # - Validación segura de la firma
 # - Procesamiento confiable de notificaciones
 #
-# Referencia oficial del problema:
+# Referencia del problema:
 # https://github.com/mercadopago/sdk-nodejs/discussions/318
 #
 # Esta API actúa como un microservicio desacoplado

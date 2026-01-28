@@ -16,10 +16,13 @@ const Order = sequelize.define(
       allowNull: false,
     },
 
-    paymentMethod: {
-      // mercadopago | cash
-      type: DataTypes.ENUM("mercadopago", "cash"),
+    paymentMethodId: {
+      type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: 'payment_methods',
+        key: 'id'
+      }
     },
 
     paymentStatus: {

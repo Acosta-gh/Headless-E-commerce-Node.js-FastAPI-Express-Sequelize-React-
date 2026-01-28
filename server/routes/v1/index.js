@@ -17,8 +17,9 @@ const verifyRoutes = require('@/routes/v1/verify.routes');
 const likeRoutes = require('@/routes/v1/like.routes');
 const subscriberRoutes = require('@/routes/v1/subscriber.routes');
 const authRoutes = require('@/routes/v1/auth.routes');
-const mercadopagoRoutes = require('@/routes/v1/mercadopago.routes');
+//const mercadopagoRoutes = require('@/routes/v1/mercadopago.routes');
 const orderRoutes = require('@/routes/v1/order.routes');
+const paymentRoutes = require('@/routes/v1/payment.routes');
 
 
 // ======================================================================
@@ -45,9 +46,11 @@ router.use('/subscriber', subscriberRoutes);
 // 
 router.use('/auth', authRoutes);
 
-router.use('/mercadopago', mercadopagoRoutes);
+// router.use('/mercadopago', mercadopagoRoutes);
 
-router.use('/order',orderRoutes);
+router.use('/order', orderRoutes);
+
+router.use('/payment', paymentRoutes);
 
 // ======================================================================
 //                      🗂️  API v1 Base Route
