@@ -15,8 +15,9 @@ const {
   getArticleById,
   updateArticle,
   deleteArticle,
+  getArticleBySlug
 } = require("@/controllers/article.controller");
-
+console.log("getArticleBySlug:", typeof getArticleBySlug);
 // ======================================================================
 //            📁 File Upload Middlewares
 // ======================================================================
@@ -48,11 +49,15 @@ router.post(
   createArticle
 );
 
+router.get('/slug/:slug', getArticleBySlug);
+
 // Get all articles
 router.get("/", getAllArticles);
 
+
 // Get a specific article by ID
 router.get("/:id", getArticleById);
+
 
 // Update a specific article by ID
 router.put(

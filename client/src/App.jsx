@@ -15,8 +15,8 @@ const Home = lazy(() => import("./pages/Home"));
 const About = lazy(() => import("./pages/About"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const Admin = lazy(() => import("./pages/AdminPanel")); // Even though it's called AdminPanel it only handles articles.
-const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const ManageArticesPage = lazy(() => import("./pages/ManageArticesPage"));
+const ManageUsersPage = lazy(() => import("./pages/ManageUsersPage"));
 const SignUpPage = lazy(() => import("./pages/SignUpPage"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Loading = lazy(() => import("./components/Loading.jsx"));
@@ -27,6 +27,10 @@ const AllArticles = lazy(() => import("./pages/AllArticles.jsx"));
 const ForgotPage = lazy(() => import("./pages/ForgotPage.jsx"));
 const ResetPage = lazy(() => import("./pages/ResetPage.jsx"));
 const VerifySubscriber = lazy(() => import("./pages/VerifySubscriber.jsx"));
+const OrdersPage = lazy(() => import("./pages/OrdersPage.jsx"));
+const ShippingMethods = lazy(() => import("./pages/ShippingMethods.jsx"));
+const Coupons = lazy(() => import("./pages/Coupons.jsx"));
+const Payments = lazy(() => import("./pages/Payments.jsx"));
 
 // 🔐 Protected Routes
 function ProtectedRoute({ children, requireAdmin = false }) {
@@ -88,7 +92,17 @@ const router = createHashRouter([
         element: (
           <ProtectedRoute requireAdmin={true}>
             <Suspense fallback={<Loading />}>
-              <Admin />
+              <ManageArticesPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/coupons",
+        element: (
+          <ProtectedRoute requireAdmin={true}>
+            <Suspense fallback={<Loading />}>
+              <Coupons />
             </Suspense>
           </ProtectedRoute>
         ),
@@ -98,9 +112,30 @@ const router = createHashRouter([
         element: (
           <ProtectedRoute requireAdmin={true}>
             <Suspense fallback={<Loading />}>
-              <AdminUsers />
+              <ManageUsersPage />
             </Suspense>
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/shippingMethods",
+        element: (
+          <ProtectedRoute requireAdmin={true}>
+            <Suspense fallback={<Loading />}>
+              <ShippingMethods />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/payments-methods",
+        element: (
+          <ProtectedRoute requireAdmin={true}>
+            <Suspense fallback={<Loading />}>
+              <Payments />
+            </Suspense>
+          </ProtectedRoute>
+
         ),
       },
       {
@@ -116,6 +151,14 @@ const router = createHashRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <AllArticles />
+          </Suspense>
+        ),
+      },
+      {
+        path: "/orders",
+        element: (
+          <Suspense fallback={<Loading />}>
+            <OrdersPage />
           </Suspense>
         ),
       },
@@ -137,7 +180,7 @@ const router = createHashRouter([
       </Suspense>
     ),
   },
-    {
+  {
     path: "/reset",
     element: (
       <Suspense fallback={<Loading />}>
@@ -161,7 +204,7 @@ const router = createHashRouter([
       </Suspense>
     ),
   },
-    {
+  {
     path: "/subscriber",
     element: (
       <Suspense fallback={<Loading />}>

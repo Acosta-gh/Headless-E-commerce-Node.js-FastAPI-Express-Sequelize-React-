@@ -11,14 +11,14 @@ const createPreference = async ({ items, external_reference }) => {
   if (!external_reference) {
     throw new Error("external_reference is required");
   }
-  
+
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw new Error("items are required");
   }
 
   try {
     const preference = new Preference(client);
-    
+
     const body = {
       items: items.map(item => ({
         title: item.title,
@@ -38,7 +38,7 @@ const createPreference = async ({ items, external_reference }) => {
     };
 
     const response = await preference.create({ body });
-    
+
     return {
       id: response.id,
       init_point: response.init_point,

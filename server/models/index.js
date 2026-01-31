@@ -10,83 +10,207 @@ const { Token } = require('@/models/token.model');
 const { Order } = require('@/models/order.model');
 const { OrderItem } = require('@/models/orderItem.model');
 const { PaymentMethod } = require('@/models/paymentMethod.model');
+const { ShippingMethod } = require('@/models/shippingMethod.model');
+const { Coupon } = require('@/models/coupon.model');
+const { CouponUsage } = require('@/models/couponUsage.model');
+
 
 // =====================
 // Subscriber ↔ Token
 // =====================
-Token.belongsTo(Subscriber, { foreignKey: 'subscriberId', as: 'subscriber', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Subscriber.hasMany(Token, { foreignKey: 'subscriberId', as: 'tokens', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Token.belongsTo(Subscriber, {
+  foreignKey: 'subscriberId',
+  as: 'subscriber',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Subscriber.hasMany(Token, {
+  foreignKey: 'subscriberId',
+  as: 'tokens',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // User ↔ Token
 // =====================
-Token.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-User.hasMany(Token, { foreignKey: 'userId', as: 'tokens', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Token.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+User.hasMany(Token, {
+  foreignKey: 'userId',
+  as: 'tokens',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // User ↔ Article
 // =====================
-Article.belongsTo(User, { foreignKey: 'authorId', as: 'author', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-User.hasMany(Article, { foreignKey: 'authorId', as: 'articles', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Article.belongsTo(User, {
+  foreignKey: 'authorId',
+  as: 'author',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+User.hasMany(Article, {
+  foreignKey: 'authorId',
+  as: 'articles',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Article ↔ Image
 // =====================
-Image.belongsTo(Article, { foreignKey: 'articleId', as: 'article', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Article.hasMany(Image, { foreignKey: 'articleId', as: 'images', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Image.belongsTo(Article, {
+  foreignKey: 'articleId',
+  as: 'article',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Article.hasMany(Image, {
+  foreignKey: 'articleId',
+  as: 'images',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Article ↔ Comment
 // =====================
-Comment.belongsTo(Article, { foreignKey: 'articleId', as: 'article', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Article.hasMany(Comment, { foreignKey: 'articleId', as: 'comments', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Comment.belongsTo(Article, {
+  foreignKey: 'articleId',
+  as: 'article',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Article.hasMany(Comment, {
+  foreignKey: 'articleId',
+  as: 'comments',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Comment ↔ User
 // =====================
-Comment.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-User.hasMany(Comment, { foreignKey: 'userId', as: 'comments', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Comment.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+User.hasMany(Comment, {
+  foreignKey: 'userId',
+  as: 'comments',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Comment ↔ Comment (Replies)
 // =====================
-Comment.belongsTo(Comment, { foreignKey: 'commentId', as: 'parentComment', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Comment.hasMany(Comment, { foreignKey: 'commentId', as: 'replies', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Comment.belongsTo(Comment, {
+  foreignKey: 'commentId',
+  as: 'parentComment',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Comment.hasMany(Comment, {
+  foreignKey: 'commentId',
+  as: 'replies',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Like ↔ Article
 // =====================
-Like.belongsTo(Article, { foreignKey: 'articleId', as: 'article', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Article.hasMany(Like, { foreignKey: 'articleId', as: 'likes', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Like.belongsTo(Article, {
+  foreignKey: 'articleId',
+  as: 'article',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Article.hasMany(Like, {
+  foreignKey: 'articleId',
+  as: 'likes',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Like ↔ User
 // =====================
-Like.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-User.hasMany(Like, { foreignKey: 'userId', as: 'likes', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Like.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+User.hasMany(Like, {
+  foreignKey: 'userId',
+  as: 'likes',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Like ↔ Comment
 // =====================
-Like.belongsTo(Comment, { foreignKey: 'commentId', as: 'comment', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Comment.hasMany(Like, { foreignKey: 'commentId', as: 'likes', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Like.belongsTo(Comment, {
+  foreignKey: 'commentId',
+  as: 'comment',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Comment.hasMany(Like, {
+  foreignKey: 'commentId',
+  as: 'likes',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Bookmark ↔ Article
 // =====================
-Bookmark.belongsTo(Article, { foreignKey: 'articleId', as: 'article', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-Article.hasMany(Bookmark, { foreignKey: 'articleId', as: 'bookmarks', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Bookmark.belongsTo(Article, {
+  foreignKey: 'articleId',
+  as: 'article',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Article.hasMany(Bookmark, {
+  foreignKey: 'articleId',
+  as: 'bookmarks',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Bookmark ↔ User
 // =====================
-Bookmark.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
-User.hasMany(Bookmark, { foreignKey: 'userId', as: 'bookmarks', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+Bookmark.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+User.hasMany(Bookmark, {
+  foreignKey: 'userId',
+  as: 'bookmarks',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // =====================
 // Article ↔ Category (Many-to-Many)
 // =====================
-Article.belongsToMany(Category, { 
+Article.belongsToMany(Category, {
   through: 'ArticleCategories',
   foreignKey: 'articleId',
   otherKey: 'categoryId',
@@ -148,13 +272,20 @@ OrderItem.belongsTo(Article, {
   onUpdate: 'CASCADE'
 });
 
+Article.hasMany(OrderItem, {
+  foreignKey: 'productId',
+  as: 'orderItems',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
 // =====================
 // Order ↔ PaymentMethod
 // =====================
 Order.belongsTo(PaymentMethod, {
   foreignKey: 'paymentMethodId',
-  as: 'payment', 
-  onDelete: 'RESTRICT', 
+  as: 'paymentMethod',
+  onDelete: 'RESTRICT',
   onUpdate: 'CASCADE'
 });
 
@@ -162,6 +293,86 @@ PaymentMethod.hasMany(Order, {
   foreignKey: 'paymentMethodId',
   as: 'orders',
   onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE'
+});
+
+// =====================
+// Order ↔ ShippingMethod
+// =====================
+Order.belongsTo(ShippingMethod, {
+  foreignKey: 'shippingMethodId',
+  as: 'shippingMethod',
+  onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE'
+});
+
+ShippingMethod.hasMany(Order, {
+  foreignKey: 'shippingMethodId',
+  as: 'orders',
+  onDelete: 'RESTRICT',
+  onUpdate: 'CASCADE'
+});
+
+
+// =====================
+// Coupon ↔ Order
+// =====================
+Order.belongsTo(Coupon, {
+  foreignKey: 'couponId',
+  as: 'coupon',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
+Coupon.hasMany(Order, {
+  foreignKey: 'couponId',
+  as: 'orders',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
+// =====================
+// CouponUsage 
+// =====================
+CouponUsage.belongsTo(Coupon, {
+  foreignKey: 'couponId',
+  as: 'coupon',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+Coupon.hasMany(CouponUsage, {
+  foreignKey: 'couponId',
+  as: 'usages',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+CouponUsage.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(CouponUsage, {
+  foreignKey: 'userId',
+  as: 'couponUsages',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+CouponUsage.belongsTo(Order, {
+  foreignKey: 'orderId',
+  as: 'order',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+Order.hasOne(CouponUsage, {
+  foreignKey: 'orderId',
+  as: 'couponUsage',
+  onDelete: 'CASCADE',
   onUpdate: 'CASCADE'
 });
 
@@ -177,5 +388,8 @@ module.exports = {
   Token,
   Order,
   OrderItem,
-  PaymentMethod
+  PaymentMethod,
+  ShippingMethod,
+  Coupon,
+  CouponUsage,
 };

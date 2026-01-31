@@ -1,32 +1,74 @@
 const OrderService = require("@/services/order.service");
 
+/**
+ * 🛒 Create new order
+ */
 const createOrder = async (req, res) => {
   try {
     const order = await OrderService.createOrder(req.body, req.user.id);
     res.status(201).json(order);
   } catch (error) {
+    console.error("Create order error:", error);
     res.status(400).json({ message: error.message });
   }
 };
 
+/**
+ * 📋 Get all orders for logged-in user
+ */
 const getOrdersByUserId = async (req, res) => {
   try {
     const orders = await OrderService.getUserOrders(req.user.id);
     res.status(200).json(orders);
   } catch (error) {
+    console.error("Get user orders error:", error);
     res.status(400).json({ message: error.message });
   }
-};  
+};
 
 /**
- * Actualizar estado de pago desde webhook Python
+ * 🔍 Get specific order by ID (user's own order)
+ */
+const getOrderById = async (req, res) => {
+  try {
+    const order = await OrderService.getOrderById(
+      req.params.orderId,
+      req.user.id // User can only see their own orders
+    );
+    res.status(200).json({ success: true, order });
+  } catch (error) {
+    console.error("Get order by ID error:", error);
+    res.status(404).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * ❌ Cancel order (user's own order)
+ */
+const cancelOrderById = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await OrderService.cancelOrder(
+      req.params.orderId,
+      req.user.id, // Only allow user to cancel their own orders
+      reason
+    );
+    res.status(200).json({ success: true, order });
+  } catch (error) {
+    console.error("Cancel order error:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 📦 Update payment status from webhook
  */
 const updatePaymentFromWebhook = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { paymentStatus, paymentId, mercadopagoStatus } = req.body;
 
-    console.log(` 📦 Actualizando orden ${orderId}:`, {
+    console.log(`📦 Actualizando orden ${orderId}:`, {
       paymentStatus,
       paymentId,
       mercadopagoStatus,
@@ -40,7 +82,7 @@ const updatePaymentFromWebhook = async (req, res) => {
 
     // Si el pago fue aprobado, actualizar también el orderStatus
     if (paymentStatus === "paid") {
-      await OrderService.updateOrderStatus(orderId, "shipped");
+      await OrderService.updateOrderStatus(orderId, "confirmed");
     }
 
     res.status(200).json({
@@ -57,8 +99,7 @@ const updatePaymentFromWebhook = async (req, res) => {
 };
 
 /**
- * Actualizar estado de pago MANUALMENTE (admin)
- * Ej: efectivo, transferencia, corrección manual
+ * 💳 Update payment status manually (Admin)
  */
 const updatePaymentManually = async (req, res) => {
   try {
@@ -86,7 +127,7 @@ const updatePaymentManually = async (req, res) => {
 
     // Lógica post-pago
     if (paymentStatus === "paid") {
-      await OrderService.updateOrderStatus(orderId, "shipped");
+      await OrderService.updateOrderStatus(orderId, "confirmed");
     }
 
     return res.status(200).json({
@@ -103,7 +144,9 @@ const updatePaymentManually = async (req, res) => {
   }
 };
 
-
+/**
+ * 📦 Update order status manually (Admin)
+ */
 const updateOrderStatusManually = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -121,7 +164,7 @@ const updateOrderStatusManually = async (req, res) => {
           currentOrderStatus: order.orderStatus,
         });
       }
-    } 
+    }
 
     console.log(`🧑‍💼 Orden manual - Orden ${orderId}`, {
       orderStatus,
@@ -149,10 +192,216 @@ const updateOrderStatusManually = async (req, res) => {
   }
 };
 
+/**
+ * 📋 Get all orders (Admin)
+ */
+const getAllOrders = async (req, res) => {
+  try {
+    const { Order, OrderItem, PaymentMethod, ShippingMethod, User } = require('@/models');
+    const { status, limit = 50, offset = 0 } = req.query;
+
+    const where = {};
+    if (status) {
+      where.orderStatus = status;
+    }
+
+    const orders = await Order.findAll({
+      where,
+      include: [
+        {
+          model: OrderItem,
+          as: 'items',
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'username', 'email']
+        },
+        {
+          model: PaymentMethod,
+          as: 'paymentMethod',
+          attributes: ['id', 'code', 'name']
+        },
+        {
+          model: ShippingMethod,
+          as: 'shippingMethod',
+          attributes: ['id', 'code', 'name', 'carrierName']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    const total = await Order.count({ where });
+
+    res.status(200).json({
+      success: true,
+      orders,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: parseInt(offset) + orders.length < total
+      }
+    });
+  } catch (error) {
+    console.error("Get all orders error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 🔍 Get order by ID (Admin - any order)
+ */
+const getOrderByIdAdmin = async (req, res) => {
+  try {
+    const order = await OrderService.getOrderById(req.params.orderId);
+    res.status(200).json({ success: true, order });
+  } catch (error) {
+    console.error("Get order by ID (admin) error:", error);
+    res.status(404).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 📝 Add tracking number (Admin)
+ */
+const addTrackingNumber = async (req, res) => {
+  try {
+    const { Order } = require('@/models');
+    const { trackingNumber, carrierName } = req.body;
+
+    if (!trackingNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tracking number is required'
+      });
+    }
+
+    const order = await Order.findByPk(req.params.orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    await order.update({
+      trackingNumber,
+      carrierName: carrierName || order.carrierName
+    });
+
+    res.status(200).json({
+      success: true,
+      order
+    });
+  } catch (error) {
+    console.error("Add tracking number error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 📝 Add admin notes (Admin)
+ */
+const addAdminNotes = async (req, res) => {
+  try {
+    const { Order } = require('@/models');
+    const { adminNotes } = req.body;
+
+    const order = await Order.findByPk(req.params.orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    await order.update({ adminNotes });
+
+    res.status(200).json({
+      success: true,
+      order
+    });
+  } catch (error) {
+    console.error("Add admin notes error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * ❌ Cancel order (Admin - any order)
+ */
+const cancelOrderByIdAdmin = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await OrderService.cancelOrder(
+      req.params.orderId,
+      null, // Admin can cancel any order
+      reason || 'Cancelled by admin'
+    );
+    res.status(200).json({ success: true, order });
+  } catch (error) {
+    console.error("Cancel order (admin) error:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 📊 Get order statistics (Admin)
+ */
+const getOrderStats = async (req, res) => {
+  try {
+    const { Order } = require('@/models');
+    const { sequelize } = require('@/database/sequelize');
+
+    const stats = await Order.findAll({
+      attributes: [
+        'orderStatus',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'total'],
+      ],
+      group: ['orderStatus'],
+    });
+
+    const paymentStats = await Order.findAll({
+      attributes: [
+        'paymentStatus',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'total'],
+      ],
+      group: ['paymentStatus'],
+    });
+
+    res.status(200).json({
+      success: true,
+      orderStats: stats,
+      paymentStats: paymentStats,
+    });
+  } catch (error) {
+    console.error("Get order stats error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
+  // User endpoints
   createOrder,
   getOrdersByUserId,
+  getOrderById,
+  cancelOrderById,
+  
+  // Webhook endpoint
   updatePaymentFromWebhook,
+  
+  // Admin endpoints
   updatePaymentManually,
-  updateOrderStatusManually
+  updateOrderStatusManually,
+  getAllOrders,
+  getOrderByIdAdmin,
+  addTrackingNumber,
+  addAdminNotes,
+  cancelOrderByIdAdmin,
+  getOrderStats,
 };

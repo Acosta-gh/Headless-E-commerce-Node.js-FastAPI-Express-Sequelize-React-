@@ -35,6 +35,11 @@ const Article = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    sku: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
     slug: {
       type: DataTypes.STRING,
       allowNull: false,

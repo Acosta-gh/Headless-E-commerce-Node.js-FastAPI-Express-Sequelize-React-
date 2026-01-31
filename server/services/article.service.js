@@ -11,10 +11,11 @@ const {
   Like,
   Image,
   Comment,
-  Subscriber,  
+  Subscriber,
 } = require("@/models/index");
+
 const { adoptTempImages } = require("@/utils/imageUtils");
-const { transformArticle } = require("@/utils/dataTransformers"); 
+const { transformArticle } = require("@/utils/dataTransformers");
 const fs = require("fs");
 const path = require("path");
 
@@ -24,10 +25,9 @@ const { sendEmail } = require("@/utils/emailUtils");
 const createArticle = async (data) => {
   try {
     const { categoryIds, tempId, ...articleData } = data;
-    
-    // 🔍 Debug: ver qué datos estás recibiendo
+
     console.log("💰 Price:", data.price, "📦 Stock:", data.stock);
-    
+
     const article = await Article.create(articleData);
 
     if (Array.isArray(categoryIds)) {
@@ -108,6 +108,33 @@ const getArticleById = async (id) => {
   }
 };
 
+const getArticleBySlug = async (slug) => {
+  try {
+    const article = await Article.findOne({
+      where: { slug: slug },
+      include: [
+        { model: User, as: "author", attributes: ["id", "username", "email"] },
+        { model: Image, as: "images", attributes: ["id", "url"] },
+        {
+          model: Like,
+          as: "likes",
+          attributes: ["userId"],
+          where: { commentId: null },
+          required: false,
+        },
+        { model: Category, as: "categories", attributes: ["id", "name"] },
+      ],
+    });
+
+    if (!article) throw new Error("Article not found");
+
+    return transformArticle(article.get({ plain: true }));
+  } catch (error) {
+    throw new Error("Error fetching article: " + error.message);
+  }
+};
+
+
 const updateArticle = async (id, data) => {
   try {
     const article = await Article.findByPk(id);
@@ -178,4 +205,5 @@ module.exports = {
   getArticleById,
   updateArticle,
   deleteArticle,
+  getArticleBySlug
 };

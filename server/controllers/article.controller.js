@@ -26,7 +26,7 @@ async function createArticle(req, res) {
       bannerPath = `/uploads/${req.file.filename}`;
     }
 
-    const { title, content, tempId, featured, stock, price } = req.body;
+    const { title, content, tempId, featured, stock, price, sku } = req.body;
 
     // Convert featured to booalean in case it's sent as a string because of form data
     const isFeatured = featured === "true" || featured === true;
@@ -37,6 +37,7 @@ async function createArticle(req, res) {
       content,
       banner: bannerPath,
       tempId,
+      sku,
       featured: isFeatured,
       stock: Number(stock),
       price: Number(price),
@@ -53,6 +54,12 @@ async function createArticle(req, res) {
 async function getAllArticles(req, res) {
   const articles = await articleService.getAllArticles();
   return res.status(200).json(articles);
+}
+
+async function getArticleBySlug(req, res) {
+  const article = await articleService.getArticleBySlug(req.params.slug);
+  if (!article) return res.status(404).json({ error: "Article not found" });
+  return res.status(200).json(article);
 }
 
 async function getArticleById(req, res) {
@@ -121,4 +128,5 @@ module.exports = {
   getArticleById,
   updateArticle,
   deleteArticle,
+  getArticleBySlug,
 };

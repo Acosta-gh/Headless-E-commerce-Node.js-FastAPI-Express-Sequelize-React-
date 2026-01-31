@@ -43,12 +43,11 @@ module.exports = {
         },
       ],
       {
-        ignoreDuplicates: true, // 👈 CLAVE
+        ignoreDuplicates: true,
       }
     );
   },
 
   async down() {
-    // ❗ no se borran métodos de pago base
   },
 };
