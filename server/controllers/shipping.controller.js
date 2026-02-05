@@ -2,20 +2,33 @@ const ShippingService = require('@/services/shipping.service');
 
 /**
  * 📦 Get available shipping methods for a given address and cart
- * POST /api/shipping/calculate
+ * POST /api/v1/shipping/calculate
  */
 const getAvailableShippingMethods = async (req, res) => {
   try {
-    const { shippingAddress, cartSubtotal, cartWeight } = req.body;
+    const { shippingAddress, cartSubtotal, isBulky } = req.body;
 
-    if (!shippingAddress || !shippingAddress.city || !shippingAddress.state ||
-      !shippingAddress.postalCode || !shippingAddress.country) {
+    // Validate shipping address
+    if (!shippingAddress) {
       return res.status(400).json({
         success: false,
-        message: 'Complete shipping address is required (city, state, postalCode, country)'
+        message: 'Shipping address is required'
       });
     }
 
+    if (!shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
+      return res.status(400).json({
+        success: false,
+        message: 'Complete shipping address is required (city, postalCode, country)'
+      });
+    }
+
+    // Province/state is optional but recommended
+    if (!shippingAddress.state && !shippingAddress.province) {
+      console.warn('Province/state not provided in shipping address');
+    }
+
+    // Validate cart subtotal
     if (!cartSubtotal || cartSubtotal <= 0) {
       return res.status(400).json({
         success: false,
@@ -23,11 +36,10 @@ const getAvailableShippingMethods = async (req, res) => {
       });
     }
 
-    // ✅ Pass address directly - service handles normalization
     const availableMethods = await ShippingService.getAvailableShippingMethods(
       shippingAddress,
       parseFloat(cartSubtotal),
-      cartWeight ? parseFloat(cartWeight) : 0
+      Boolean(isBulky)
     );
 
     res.status(200).json({
@@ -47,12 +59,12 @@ const getAvailableShippingMethods = async (req, res) => {
 
 /**
  * 💰 Calculate shipping cost for a specific method
- * POST /api/shipping/calculate/:methodId
+ * POST /api/v1/shipping/calculate/:methodId
  */
 const calculateShippingCost = async (req, res) => {
   try {
     const { methodId } = req.params;
-    const { shippingAddress, orderSubtotal, orderWeight } = req.body;
+    const { shippingAddress, orderSubtotal, isBulky } = req.body;
 
     if (!methodId) {
       return res.status(400).json({
@@ -61,8 +73,7 @@ const calculateShippingCost = async (req, res) => {
       });
     }
 
-    if (!shippingAddress || !shippingAddress.city || !shippingAddress.state ||
-      !shippingAddress.postalCode || !shippingAddress.country) {
+    if (!shippingAddress || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
       return res.status(400).json({
         success: false,
         message: 'Complete shipping address is required'
@@ -76,12 +87,11 @@ const calculateShippingCost = async (req, res) => {
       });
     }
 
-    // ✅ Pass address directly - service handles normalization
     const costData = await ShippingService.calculateShippingCost(
       parseInt(methodId),
       shippingAddress,
       parseFloat(orderSubtotal),
-      orderWeight ? parseFloat(orderWeight) : 0
+      Boolean(isBulky)
     );
 
     res.status(200).json({
@@ -100,19 +110,18 @@ const calculateShippingCost = async (req, res) => {
 
 /**
  * ✅ Validate shipping method for an order
- * POST /api/shipping/validate/:methodId
+ * POST /api/v1/shipping/validate/:methodId
  */
 const validateShippingMethod = async (req, res) => {
   try {
     const { methodId } = req.params;
-    const { shippingAddress, orderSubtotal, orderWeight } = req.body;
+    const { shippingAddress, orderSubtotal, isBulky } = req.body;
 
-    // Pass address directly - service handles normalization
     const validation = await ShippingService.validateShippingMethod(
       parseInt(methodId),
       shippingAddress,
       parseFloat(orderSubtotal),
-      orderWeight ? parseFloat(orderWeight) : 0
+      Boolean(isBulky)
     );
 
     res.status(200).json({
@@ -135,7 +144,7 @@ const validateShippingMethod = async (req, res) => {
 
 /**
  * 📋 Get all shipping methods (Admin)
- * GET /api/admin/shipping-methods
+ * GET /api/v1/shipping/admin/all
  */
 const getAllShippingMethods = async (req, res) => {
   try {
@@ -158,19 +167,12 @@ const getAllShippingMethods = async (req, res) => {
 
 /**
  * 🔍 Get shipping method by ID (Admin)
- * GET /api/admin/shipping-methods/:id
+ * GET /api/v1/shipping/admin/:id
  */
 const getShippingMethodById = async (req, res) => {
   try {
     const { id } = req.params;
     const method = await ShippingService.getShippingMethodById(parseInt(id));
-
-    if (!method) {
-      return res.status(404).json({
-        success: false,
-        message: 'Shipping method not found'
-      });
-    }
 
     res.status(200).json({
       success: true,
@@ -179,59 +181,6 @@ const getShippingMethodById = async (req, res) => {
 
   } catch (error) {
     console.error('Error getting shipping method:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-/**
- * ➕ Create shipping method (Admin)
- * POST /api/admin/shipping-methods
- */
-const createShippingMethod = async (req, res) => {
-  try {
-    const method = await ShippingService.createShippingMethod(req.body);
-
-    res.status(201).json({
-      success: true,
-      method
-    });
-
-  } catch (error) {
-    console.error('Error creating shipping method:', error);
-
-    if (error.message.includes('already exists')) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-/**
- * ✏️ Update shipping method (Admin)
- * PATCH /api/admin/shipping-methods/:id
- */
-const updateShippingMethod = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const method = await ShippingService.updateShippingMethod(parseInt(id), req.body);
-
-    res.status(200).json({
-      success: true,
-      method
-    });
-
-  } catch (error) {
-    console.error('Error updating shipping method:', error);
 
     if (error.message.includes('not found')) {
       return res.status(404).json({
@@ -248,8 +197,78 @@ const updateShippingMethod = async (req, res) => {
 };
 
 /**
+ * ➕ Create shipping method (Admin)
+ * POST /api/v1/shipping/admin
+ */
+const createShippingMethod = async (req, res) => {
+  try {
+    const method = await ShippingService.createShippingMethod(req.body);
+
+    res.status(201).json({
+      success: true,
+      method,
+      message: 'Shipping method created successfully'
+    });
+
+  } catch (error) {
+    console.error('Error creating shipping method:', error);
+
+    if (error.message.includes('already exists') || error.message.includes('Validation')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+/**
+ * ✏️ Update shipping method (Admin)
+ * PATCH /api/v1/shipping/admin/:id
+ */
+const updateShippingMethod = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const method = await ShippingService.updateShippingMethod(parseInt(id), req.body);
+
+    res.status(200).json({
+      success: true,
+      method,
+      message: 'Shipping method updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating shipping method:', error);
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('Validation')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+/**
  * 🔄 Toggle shipping method status (Admin)
- * PATCH /api/admin/shipping-methods/:id/toggle
+ * PATCH /api/v1/shipping/admin/:id/toggle
  */
 const toggleShippingMethodStatus = async (req, res) => {
   try {
@@ -281,58 +300,21 @@ const toggleShippingMethodStatus = async (req, res) => {
 
 /**
  * 🗑️ Delete shipping method (Admin)
- * DELETE /api/admin/shipping-methods/:id
+ * DELETE /api/v1/shipping/admin/:id
  */
 const deleteShippingMethod = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const method = await ShippingService.deleteShippingMethodById(
-      parseInt(id),
-    );
+    const method = await ShippingService.deleteShippingMethodById(parseInt(id));
 
     res.status(200).json({
       success: true,
-      message: 'Shipping method deleted',
+      message: 'Shipping method deleted successfully',
       method
     });
 
   } catch (error) {
-    console.error('Error deliting shipping method:', error);
-
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-
-const disableShippingMethod = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Soft delete - just disable it
-    const method = await ShippingService.updateShippingMethod(
-      parseInt(id),
-      { enabled: false }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Shipping method disabled',
-      method
-    });
-
-  } catch (error) {
-    console.error('Error disabling shipping method:', error);
+    console.error('Error deleting shipping method:', error);
 
     if (error.message.includes('not found')) {
       return res.status(404).json({
@@ -361,5 +343,4 @@ module.exports = {
   updateShippingMethod,
   toggleShippingMethodStatus,
   deleteShippingMethod,
-  disableShippingMethod,
 };

@@ -14,7 +14,6 @@ const {
   updateShippingMethod,
   toggleShippingMethodStatus,
   deleteShippingMethod,
-  disableShippingMethod
 } = require('@/controllers/shipping.controller');
 
 // =====================
@@ -24,7 +23,11 @@ const {
 /**
  * Get available shipping methods for checkout
  * POST /api/v1/shipping/calculate
- * Body: { shippingAddress, cartSubtotal, cartWeight }
+ * Body: { 
+ *   shippingAddress: { city, state/province, postalCode, country },
+ *   cartSubtotal: number,
+ *   isBulky: boolean (optional)
+ * }
  */
 router.post(
   '/calculate',
@@ -35,7 +38,11 @@ router.post(
 /**
  * Calculate cost for specific shipping method
  * POST /api/v1/shipping/calculate/:methodId
- * Body: { shippingAddress, orderSubtotal, orderWeight }
+ * Body: { 
+ *   shippingAddress: { city, state/province, postalCode, country },
+ *   orderSubtotal: number,
+ *   isBulky: boolean (optional)
+ * }
  */
 router.post(
   '/calculate/:methodId',
@@ -46,7 +53,11 @@ router.post(
 /**
  * Validate if shipping method is available
  * POST /api/v1/shipping/validate/:methodId
- * Body: { shippingAddress, orderSubtotal, orderWeight }
+ * Body: { 
+ *   shippingAddress: { city, state/province, postalCode, country },
+ *   orderSubtotal: number,
+ *   isBulky: boolean (optional)
+ * }
  */
 router.post(
   '/validate/:methodId',
@@ -59,7 +70,7 @@ router.post(
 // =====================
 
 /**
- * Get all shipping methods (with disabled ones)
+ * Get all shipping methods (including disabled ones)
  * GET /api/v1/shipping/admin/all
  */
 router.get(
@@ -85,7 +96,24 @@ router.get(
 /**
  * Create new shipping method
  * POST /api/v1/shipping/admin
- * Body: { code, name, baseCost, ... }
+ * Body: {
+ *   code: string (unique),
+ *   name: string,
+ *   description: string (optional),
+ *   baseCost: number,
+ *   enabled: boolean (default: true),
+ *   displayOrder: number (optional),
+ *   estimatedDaysMin: number (optional),
+ *   estimatedDaysMax: number (optional),
+ *   carrierName: string (optional),
+ *   icon: string (optional),
+ *   rules: {
+ *     postalCodes: { "1000": { cost: 0 }, "5000": { cost: 600 } },
+ *     provinces: { "Buenos Aires": { cost: 0 }, "Cordoba": { cost: 500 } },
+ *     bulkyExtra: number (optional),
+ *     freeShippingThreshold: number (optional)
+ *   }
+ * }
  */
 router.post(
   '/admin',
@@ -98,7 +126,7 @@ router.post(
 /**
  * Update shipping method
  * PATCH /api/v1/shipping/admin/:id
- * Body: { name, baseCost, enabled, ... }
+ * Body: Same as create (all fields optional)
  */
 router.patch(
   '/admin/:id',

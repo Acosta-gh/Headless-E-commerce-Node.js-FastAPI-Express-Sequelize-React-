@@ -151,7 +151,7 @@ function Profile() {
       title: "Analytics",
       items: [
         {
-          to: "/admin/stats",
+          to: "/stats",
           icon: BarChart3,
           label: "Statistics",
           description: "Sales and order analytics",

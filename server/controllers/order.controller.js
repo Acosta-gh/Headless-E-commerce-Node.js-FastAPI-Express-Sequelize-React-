@@ -33,7 +33,7 @@ const getOrderById = async (req, res) => {
   try {
     const order = await OrderService.getOrderById(
       req.params.orderId,
-      req.user.id // User can only see their own orders
+      req.user.id
     );
     res.status(200).json({ success: true, order });
   } catch (error) {
@@ -50,7 +50,7 @@ const cancelOrderById = async (req, res) => {
     const { reason } = req.body;
     const order = await OrderService.cancelOrder(
       req.params.orderId,
-      req.user.id, // Only allow user to cancel their own orders
+      req.user.id,
       reason
     );
     res.status(200).json({ success: true, order });
@@ -80,7 +80,6 @@ const updatePaymentFromWebhook = async (req, res) => {
       paymentId
     );
 
-    // Si el pago fue aprobado, actualizar también el orderStatus
     if (paymentStatus === "paid") {
       await OrderService.updateOrderStatus(orderId, "confirmed");
     }
@@ -106,7 +105,6 @@ const updatePaymentManually = async (req, res) => {
     const { orderId } = req.params;
     const { paymentStatus, note } = req.body;
 
-    // Validación básica
     const allowedStatuses = ["paid", "failed", "refunded"];
     if (!allowedStatuses.includes(paymentStatus)) {
       return res.status(400).json({
@@ -125,7 +123,6 @@ const updatePaymentManually = async (req, res) => {
       paymentStatus
     );
 
-    // Lógica post-pago
     if (paymentStatus === "paid") {
       await OrderService.updateOrderStatus(orderId, "confirmed");
     }
@@ -154,7 +151,6 @@ const updateOrderStatusManually = async (req, res) => {
 
     const order = await OrderService.getOrderById(orderId);
 
-    // Si quiere marcar como shipped o delivered, DEBE estar pagado
     if (["shipped", "delivered"].includes(orderStatus)) {
       if (order.paymentStatus !== "paid") {
         return res.status(400).json({
@@ -194,56 +190,22 @@ const updateOrderStatusManually = async (req, res) => {
 
 /**
  * 📋 Get all orders (Admin)
+ * REFACTORED: Moved query logic to service
  */
 const getAllOrders = async (req, res) => {
   try {
-    const { Order, OrderItem, PaymentMethod, ShippingMethod, User } = require('@/models');
     const { status, limit = 50, offset = 0 } = req.query;
 
-    const where = {};
-    if (status) {
-      where.orderStatus = status;
-    }
-
-    const orders = await Order.findAll({
-      where,
-      include: [
-        {
-          model: OrderItem,
-          as: 'items',
-        },
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'email']
-        },
-        {
-          model: PaymentMethod,
-          as: 'paymentMethod',
-          attributes: ['id', 'code', 'name']
-        },
-        {
-          model: ShippingMethod,
-          as: 'shippingMethod',
-          attributes: ['id', 'code', 'name', 'carrierName']
-        }
-      ],
-      order: [['createdAt', 'DESC']],
+    const result = await OrderService.getAllOrdersAdmin({
+      status,
       limit: parseInt(limit),
-      offset: parseInt(offset),
+      offset: parseInt(offset)
     });
-
-    const total = await Order.count({ where });
 
     res.status(200).json({
       success: true,
-      orders,
-      pagination: {
-        total,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        hasMore: parseInt(offset) + orders.length < total
-      }
+      orders: result.orders,
+      pagination: result.pagination
     });
   } catch (error) {
     console.error("Get all orders error:", error);
@@ -266,10 +228,10 @@ const getOrderByIdAdmin = async (req, res) => {
 
 /**
  * 📝 Add tracking number (Admin)
+ * REFACTORED: Moved to service
  */
 const addTrackingNumber = async (req, res) => {
   try {
-    const { Order } = require('@/models');
     const { trackingNumber, carrierName } = req.body;
 
     if (!trackingNumber) {
@@ -279,18 +241,11 @@ const addTrackingNumber = async (req, res) => {
       });
     }
 
-    const order = await Order.findByPk(req.params.orderId);
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found'
-      });
-    }
-
-    await order.update({
+    const order = await OrderService.addTrackingNumber(
+      req.params.orderId,
       trackingNumber,
-      carrierName: carrierName || order.carrierName
-    });
+      carrierName
+    );
 
     res.status(200).json({
       success: true,
@@ -304,21 +259,16 @@ const addTrackingNumber = async (req, res) => {
 
 /**
  * 📝 Add admin notes (Admin)
+ * REFACTORED: Moved to service
  */
 const addAdminNotes = async (req, res) => {
   try {
-    const { Order } = require('@/models');
     const { adminNotes } = req.body;
 
-    const order = await Order.findByPk(req.params.orderId);
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found'
-      });
-    }
-
-    await order.update({ adminNotes });
+    const order = await OrderService.addAdminNotes(
+      req.params.orderId,
+      adminNotes
+    );
 
     res.status(200).json({
       success: true,
@@ -338,7 +288,7 @@ const cancelOrderByIdAdmin = async (req, res) => {
     const { reason } = req.body;
     const order = await OrderService.cancelOrder(
       req.params.orderId,
-      null, // Admin can cancel any order
+      null,
       reason || 'Cancelled by admin'
     );
     res.status(200).json({ success: true, order });
@@ -349,38 +299,71 @@ const cancelOrderByIdAdmin = async (req, res) => {
 };
 
 /**
- * 📊 Get order statistics (Admin)
+ * 📊 Get comprehensive order statistics (Admin)
+ * REFACTORED: Moved all query logic to service
  */
 const getOrderStats = async (req, res) => {
   try {
-    const { Order } = require('@/models');
-    const { sequelize } = require('@/database/sequelize');
+    const { period = "30d", startDate, endDate } = req.query;
 
-    const stats = await Order.findAll({
-      attributes: [
-        'orderStatus',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'total'],
-      ],
-      group: ['orderStatus'],
+    const stats = await OrderService.getOrderStatistics({
+      period,
+      startDate,
+      endDate
     });
 
-    const paymentStats = await Order.findAll({
-      attributes: [
-        'paymentStatus',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'total'],
-      ],
-      group: ['paymentStatus'],
-    });
+    res.status(200).json(stats);
 
-    res.status(200).json({
-      success: true,
-      orderStats: stats,
-      paymentStats: paymentStats,
-    });
   } catch (error) {
     console.error("Get order stats error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+/**
+ * 📄 Export statistics to CSV
+ * REFACTORED: Moved query logic to service
+ */
+const exportStatsToCSV = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const csv = await OrderService.exportOrdersToCSV({
+      startDate,
+      endDate
+    });
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename=orders-export-${Date.now()}.csv`);
+    res.status(200).send(csv);
+
+  } catch (error) {
+    console.error("Export CSV error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 📄 Export statistics to PDF
+ * REFACTORED: Moved to service
+ */
+const exportStatsToPDF = async (req, res) => {
+  try {
+    const { period = "30d" } = req.query;
+
+    const pdfStream = await OrderService.exportOrderStatsToPDF({ period });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=stats-report-${Date.now()}.pdf`);
+
+    pdfStream.pipe(res);
+
+  } catch (error) {
+    console.error("Export PDF error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -391,10 +374,10 @@ module.exports = {
   getOrdersByUserId,
   getOrderById,
   cancelOrderById,
-  
+
   // Webhook endpoint
   updatePaymentFromWebhook,
-  
+
   // Admin endpoints
   updatePaymentManually,
   updateOrderStatusManually,
@@ -404,4 +387,6 @@ module.exports = {
   addAdminNotes,
   cancelOrderByIdAdmin,
   getOrderStats,
+  exportStatsToCSV,
+  exportStatsToPDF
 };

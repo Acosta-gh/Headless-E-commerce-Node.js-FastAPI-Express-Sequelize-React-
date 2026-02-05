@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getUserOrders,
-  getAllOrdersAdmin,
+  getAllOrders,
   getOrderById,
   getOrderByIdAdmin,
   cancelOrder,
   cancelOrderAdmin,
-  updatePaymentStatus,
+  updatePaymentManually,
   updateOrderStatus,
   addTrackingNumber,
   addAdminNotes,
@@ -45,7 +45,7 @@ export const useOrders = () => {
 
         if (isAdmin) {
           // Admin: fetch all orders with filters
-          data = await getAllOrdersAdmin(token, filters);
+          data = await getAllOrders(token, filters);
           setOrders(data.orders || []);
           setPagination(data.pagination || {});
         } else {
@@ -140,10 +140,10 @@ export const useOrders = () => {
         }
 
         toast.success("Order cancelled successfully");
-        
+
         // Refresh orders list
         await fetchOrders();
-        
+
         return data.order;
       } catch (err) {
         const errorMessage = err.response?.data?.message || "Error cancelling order";
@@ -168,12 +168,12 @@ export const useOrders = () => {
       setError(null);
 
       try {
-        const data = await updatePaymentStatus(orderId, paymentStatus, note, token);
+        const data = await updatePaymentManually(orderId, paymentStatus, note, token);
         toast.success("Payment status updated");
-        
+
         // Refresh orders list
         await fetchOrders();
-        
+
         return data.order;
       } catch (err) {
         const errorMessage = err.response?.data?.message || "Error updating payment";
@@ -200,10 +200,10 @@ export const useOrders = () => {
       try {
         const data = await updateOrderStatus(orderId, orderStatus, token);
         toast.success("Order status updated");
-        
+
         // Refresh orders list
         await fetchOrders();
-        
+
         return data.order;
       } catch (err) {
         const errorMessage = err.response?.data?.message || "Error updating status";
@@ -230,10 +230,10 @@ export const useOrders = () => {
       try {
         const data = await addTrackingNumber(orderId, trackingNumber, carrierName, token);
         toast.success("Tracking number added");
-        
+
         // Refresh orders list
         await fetchOrders();
-        
+
         return data.order;
       } catch (err) {
         const errorMessage = err.response?.data?.message || "Error adding tracking";
@@ -260,10 +260,10 @@ export const useOrders = () => {
       try {
         const data = await addAdminNotes(orderId, adminNotes, token);
         toast.success("Notes added");
-        
+
         // Refresh orders list
         await fetchOrders();
-        
+
         return data.order;
       } catch (err) {
         const errorMessage = err.response?.data?.message || "Error adding notes";

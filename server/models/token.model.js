@@ -5,7 +5,7 @@ const Token = sequelize.define(
   "Token",
   {
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: true,
     },
     subscriberId: {

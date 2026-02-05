@@ -6,9 +6,13 @@
 
 const { Order, OrderItem, Article, PaymentMethod, ShippingMethod, User } = require("@/models");
 const { sequelize } = require("@/database/sequelize");
+const { Op } = require("sequelize");
 const { createPreference } = require("@/services/mercadopago.service");
-const { calculateShippingCost, validateShippingMethod } = require("@/services/shipping.service");
+const { calculateShippingCost } = require("@/services/shipping.service");
 const CouponService = require("@/services/coupon.service");
+const PDFDocument = require("pdfkit");
+const { Parser } = require("json2csv");
+
 /**
  * Generate unique order number
  */
@@ -36,16 +40,6 @@ const restoreStock = async (items, transaction, reason) => {
 
 /**
  * 🛒 Create a new order with transaction support.
- * @param {Object} data
- * @param {Array<{productId: number, quantity: number}>} data.items
- * @param {string} data.paymentMethodCode
- * @param {number} data.shippingMethodId
- * @param {Object} data.customerInfo - {name, email, phone}
- * @param {Object} data.shippingAddress - Full shipping address
- * @param {Object} [data.billingInfo] - Optional billing information
- * @param {string} [data.orderNotes] - Optional customer notes
- * @param {string} [data.couponCode] - Optional coupon code
- * @param {number} userId
  */
 const createOrder = async (data, userId) => {
   const transaction = await sequelize.transaction();
@@ -184,7 +178,7 @@ const createOrder = async (data, userId) => {
         shippingPostalCode: shippingAddress.postalCode,
       },
       subtotal,
-      0 // TODO: Calculate total order weight if needed
+      0
     );
 
     let shippingCost = shippingCostData.cost;
@@ -208,13 +202,11 @@ const createOrder = async (data, userId) => {
       appliedCoupon = couponResult.coupon;
       couponDiscount = couponResult.discountAmount;
 
-      // Apply free shipping if applicable
       if (couponResult.freeShipping) {
         shippingCost = 0;
         console.log("🎫 Free shipping applied from coupon");
       }
     }
-
 
     // =====================
     // Apply payment method discounts/surcharges
@@ -225,8 +217,6 @@ const createOrder = async (data, userId) => {
     let paymentDiscount = (subtotal * paymentDiscountPercentage) / 100;
     const surchargeAmount = (subtotal * paymentSurchargePercentage) / 100;
 
-
-    // Check if coupon can be combined with payment discount
     if (appliedCoupon && !appliedCoupon.combineWithPaymentDiscount) {
       paymentDiscount = 0;
       console.log("⚠️  Payment method discount disabled due to coupon rules");
@@ -304,8 +294,8 @@ const createOrder = async (data, userId) => {
         requiresInvoice: billingInfo?.requiresInvoice || false,
 
         // Metadata
-        ipAddress: null, // TODO: Get from request
-        userAgent: null, // TODO: Get from request
+        ipAddress: null,
+        userAgent: null,
       },
       { transaction }
     );
@@ -352,7 +342,6 @@ const createOrder = async (data, userId) => {
           currency_id: "ARS",
         }));
 
-        // Add shipping as an item if not free
         if (shippingCost > 0) {
           mpItems.push({
             title: `Shipping - ${shippingMethod.name}`,
@@ -824,6 +813,559 @@ const cancelOrder = async (orderId, userId = null, reason = null) => {
   }
 };
 
+/**
+ * 📋 Get all orders (Admin)
+ * REFACTORED: Moved from controller
+ */
+const getAllOrdersAdmin = async ({ status, limit, offset }) => {
+  try {
+    const where = {};
+    if (status) {
+      where.orderStatus = status;
+    }
+
+    const orders = await Order.findAll({
+      where,
+      include: [
+        {
+          model: OrderItem,
+          as: 'items',
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'username', 'email']
+        },
+        {
+          model: PaymentMethod,
+          as: 'paymentMethod',
+          attributes: ['id', 'code', 'name']
+        },
+        {
+          model: ShippingMethod,
+          as: 'shippingMethod',
+          attributes: ['id', 'code', 'name', 'carrierName']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    const total = await Order.count({ where });
+
+    return {
+      orders,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + orders.length < total
+      }
+    };
+  } catch (error) {
+    throw new Error(`Error getting all orders: ${error.message}`);
+  }
+};
+
+/**
+ * 📝 Add tracking number (Admin)
+ * REFACTORED: Moved from controller
+ */
+const addTrackingNumber = async (orderId, trackingNumber, carrierName = null) => {
+  try {
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    await order.update({
+      trackingNumber,
+      carrierName: carrierName || order.carrierName
+    });
+
+    return order;
+  } catch (error) {
+    throw new Error(`Error adding tracking number: ${error.message}`);
+  }
+};
+
+/**
+ * 📝 Add admin notes (Admin)
+ * REFACTORED: Moved from controller
+ */
+const addAdminNotes = async (orderId, adminNotes) => {
+  try {
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    await order.update({ adminNotes });
+    return order;
+  } catch (error) {
+    throw new Error(`Error adding admin notes: ${error.message}`);
+  }
+};
+
+/**
+ * 📊 Get comprehensive order statistics
+ * REFACTORED: Moved from controller
+ */
+const getOrderStatistics = async ({ period = "30d", startDate, endDate }) => {
+  try {
+    // Calculate date range
+    let dateFilter = {};
+    const now = new Date();
+
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [new Date(startDate), new Date(endDate)]
+        }
+      };
+    } else {
+      const periodMap = {
+        "7d": 7,
+        "30d": 30,
+        "90d": 90,
+        "1y": 365,
+        "all": null
+      };
+
+      const days = periodMap[period];
+      if (days) {
+        const startPeriod = new Date(now);
+        startPeriod.setDate(startPeriod.getDate() - days);
+        dateFilter = {
+          createdAt: {
+            [Op.gte]: startPeriod
+          }
+        };
+      }
+    }
+
+    // Overview metrics
+    const totalOrders = await Order.count({ where: dateFilter });
+
+    const revenueData = await Order.findOne({
+      where: {
+        ...dateFilter,
+        paymentStatus: "paid"
+      },
+      attributes: [
+        [sequelize.fn("SUM", sequelize.col("totalAmount")), "total"],
+        [sequelize.fn("AVG", sequelize.col("totalAmount")), "average"]
+      ],
+      raw: true
+    });
+
+    const totalRevenue = parseFloat(revenueData?.total || 0);
+    const averageOrderValue = parseFloat(revenueData?.average || 0);
+
+    const uniqueCustomers = await Order.count({
+      where: dateFilter,
+      distinct: true,
+      col: "userId"
+    });
+
+    // Order status breakdown
+    const ordersByStatus = await Order.findAll({
+      where: dateFilter,
+      attributes: [
+        "orderStatus",
+        [sequelize.fn("COUNT", sequelize.col("id")), "count"],
+        [sequelize.fn("SUM", sequelize.col("totalAmount")), "total"]
+      ],
+      group: ["orderStatus"],
+      raw: true
+    });
+
+    const statusBreakdown = {};
+    ordersByStatus.forEach(row => {
+      statusBreakdown[row.orderStatus] = {
+        count: parseInt(row.count),
+        total: parseFloat(row.total || 0)
+      };
+    });
+
+    // Payment status breakdown
+    const ordersByPaymentStatus = await Order.findAll({
+      where: dateFilter,
+      attributes: [
+        "paymentStatus",
+        [sequelize.fn("COUNT", sequelize.col("id")), "count"],
+        [sequelize.fn("SUM", sequelize.col("totalAmount")), "total"]
+      ],
+      group: ["paymentStatus"],
+      raw: true
+    });
+
+    const paymentBreakdown = {};
+    ordersByPaymentStatus.forEach(row => {
+      paymentBreakdown[row.paymentStatus] = {
+        count: parseInt(row.count),
+        total: parseFloat(row.total || 0)
+      };
+    });
+
+    // Top products
+    let topProducts = [];
+    try {
+      const orderIds = await Order.findAll({
+        where: dateFilter,
+        attributes: ['id'],
+        raw: true
+      });
+
+      const orderIdList = orderIds.map(o => o.id);
+
+      if (orderIdList.length > 0) {
+        topProducts = await sequelize.query(`
+          SELECT 
+            "productId",
+            "title",
+            SUM("quantity") as "totalQuantity",
+            SUM("subtotal") as "totalRevenue",
+            COUNT(DISTINCT "orderId") as "orderCount"
+          FROM "OrderItems"
+          WHERE "orderId" IN (${orderIdList.join(',')})
+          GROUP BY "productId", "title"
+          ORDER BY SUM("quantity") DESC
+          LIMIT 10
+        `, {
+          type: sequelize.QueryTypes.SELECT
+        });
+      }
+    } catch (error) {
+      console.error("Error getting top products:", error);
+      topProducts = [];
+    }
+
+    // Payment method stats
+    const paymentMethodStats = await sequelize.query(`
+      SELECT 
+        pm.id,
+        pm.code,
+        pm.name,
+        COUNT(o.id) as count,
+        COALESCE(SUM(o."totalAmount"), 0) as total
+      FROM "Orders" o
+      INNER JOIN "payment_methods" pm ON o."paymentMethodId" = pm.id
+      WHERE ${dateFilter.createdAt ? 
+        `o."createdAt" >= '${dateFilter.createdAt[Op.gte]?.toISOString() || new Date(0).toISOString()}'` : 
+        '1=1'
+      }
+      GROUP BY pm.id, pm.code, pm.name
+      ORDER BY count DESC
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // Shipping method stats
+    const shippingMethodStats = await sequelize.query(`
+      SELECT 
+        sm.id,
+        sm.code,
+        sm.name,
+        COUNT(o.id) as count,
+        COALESCE(SUM(o."shippingCost"), 0) as "totalShippingCost"
+      FROM "Orders" o
+      INNER JOIN "shipping_methods" sm ON o."shippingMethodId" = sm.id
+      WHERE ${dateFilter.createdAt ? 
+        `o."createdAt" >= '${dateFilter.createdAt[Op.gte]?.toISOString() || new Date(0).toISOString()}'` : 
+        '1=1'
+      }
+      GROUP BY sm.id, sm.code, sm.name
+      ORDER BY count DESC
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // Daily revenue (Last 30 days)
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+
+    const dailyRevenue = await Order.findAll({
+      where: {
+        createdAt: { [Op.gte]: last30Days },
+        paymentStatus: "paid"
+      },
+      attributes: [
+        [sequelize.fn("DATE", sequelize.col("createdAt")), "date"],
+        [sequelize.fn("COUNT", sequelize.col("id")), "orderCount"],
+        [sequelize.fn("SUM", sequelize.col("totalAmount")), "revenue"]
+      ],
+      group: [sequelize.fn("DATE", sequelize.col("createdAt"))],
+      order: [[sequelize.fn("DATE", sequelize.col("createdAt")), "ASC"]],
+      raw: true
+    });
+
+    // Top customers
+    const topCustomers = await sequelize.query(`
+      SELECT 
+        o."userId",
+        u.username,
+        u.email,
+        COUNT(o.id) as "orderCount",
+        SUM(o."totalAmount") as "totalSpent"
+      FROM "Orders" o
+      INNER JOIN "Users" u ON o."userId" = u.id
+      WHERE o."paymentStatus" = 'paid'
+        ${dateFilter.createdAt ? 
+          `AND o."createdAt" >= '${dateFilter.createdAt[Op.gte]?.toISOString() || new Date(0).toISOString()}'` : 
+          ''
+        }
+      GROUP BY o."userId", u.id, u.username, u.email
+      ORDER BY SUM(o."totalAmount") DESC
+      LIMIT 10
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // Today's metrics
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const ordersToday = await Order.count({
+      where: {
+        createdAt: { [Op.gte]: today }
+      }
+    });
+
+    const revenueToday = await Order.sum("totalAmount", {
+      where: {
+        createdAt: { [Op.gte]: today },
+        paymentStatus: "paid"
+      }
+    }) || 0;
+
+    // Coupon usage stats
+    const couponStats = await Order.findAll({
+      where: {
+        ...dateFilter,
+        couponId: { [Op.not]: null }
+      },
+      attributes: [
+        "couponCode",
+        [sequelize.fn("COUNT", sequelize.col("id")), "usageCount"],
+        [sequelize.fn("SUM", sequelize.col("couponDiscount")), "totalDiscount"]
+      ],
+      group: ["couponCode"],
+      order: [[sequelize.fn("COUNT", sequelize.col("id")), "DESC"]],
+      raw: true
+    });
+
+    // Conversion funnel
+    const funnelStats = {
+      created: await Order.count({
+        where: { ...dateFilter, orderStatus: "created" }
+      }),
+      confirmed: await Order.count({
+        where: { ...dateFilter, orderStatus: "confirmed" }
+      }),
+      processing: await Order.count({
+        where: { ...dateFilter, orderStatus: "processing" }
+      }),
+      shipped: await Order.count({
+        where: { ...dateFilter, orderStatus: "shipped" }
+      }),
+      delivered: await Order.count({
+        where: { ...dateFilter, orderStatus: "delivered" }
+      }),
+      cancelled: await Order.count({
+        where: { ...dateFilter, orderStatus: "cancelled" }
+      })
+    };
+
+    return {
+      success: true,
+      period,
+      dateRange: {
+        start: startDate || dateFilter.createdAt?.[Op.gte] || "all",
+        end: endDate || new Date()
+      },
+      overview: {
+        totalOrders,
+        totalRevenue,
+        averageOrderValue,
+        totalCustomers: uniqueCustomers,
+        ordersToday,
+        revenueToday
+      },
+      ordersByStatus: statusBreakdown,
+      ordersByPaymentStatus: paymentBreakdown,
+      topProducts: topProducts.map(p => ({
+        productId: p.productId,
+        title: p.title,
+        quantity: parseInt(p.totalQuantity),
+        revenue: parseFloat(p.totalRevenue),
+        orderCount: parseInt(p.orderCount)
+      })),
+      paymentMethods: paymentMethodStats.map(pm => ({
+        code: pm.code,
+        name: pm.name,
+        count: parseInt(pm.count),
+        total: parseFloat(pm.total || 0)
+      })),
+      shippingMethods: shippingMethodStats.map(sm => ({
+        code: sm.code,
+        name: sm.name,
+        count: parseInt(sm.count),
+        totalCost: parseFloat(sm.totalShippingCost || 0)
+      })),
+      dailyRevenue: dailyRevenue.map(dr => ({
+        date: dr.date,
+        orderCount: parseInt(dr.orderCount),
+        revenue: parseFloat(dr.revenue)
+      })),
+      topCustomers: topCustomers.map(tc => ({
+        userId: tc.userId,
+        username: tc.username,
+        email: tc.email,
+        orderCount: parseInt(tc.orderCount),
+        totalSpent: parseFloat(tc.totalSpent)
+      })),
+      couponUsage: couponStats.map(cs => ({
+        code: cs.couponCode,
+        usageCount: parseInt(cs.usageCount),
+        totalDiscount: parseFloat(cs.totalDiscount || 0)
+      })),
+      conversionFunnel: funnelStats
+    };
+
+  } catch (error) {
+    throw new Error(`Error getting order statistics: ${error.message}`);
+  }
+};
+
+/**
+ * 📄 Export orders to CSV
+ * REFACTORED: Moved from controller
+ */
+const exportOrdersToCSV = async ({ startDate, endDate }) => {
+  try {
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [new Date(startDate), new Date(endDate)]
+        }
+      };
+    }
+
+    const orders = await Order.findAll({
+      where: dateFilter,
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["username", "email"]
+        },
+        {
+          model: PaymentMethod,
+          as: "paymentMethod",
+          attributes: ["name"]
+        },
+        {
+          model: ShippingMethod,
+          as: "shippingMethod",
+          attributes: ["name"]
+        }
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+
+    const data = orders.map(order => ({
+      OrderNumber: order.orderNumber,
+      Date: order.createdAt.toISOString().split('T')[0],
+      Customer: order.user?.username || order.customerName,
+      Email: order.customerEmail,
+      OrderStatus: order.orderStatus,
+      PaymentStatus: order.paymentStatus,
+      PaymentMethod: order.paymentMethod?.name || "N/A",
+      ShippingMethod: order.shippingMethod?.name || "N/A",
+      Subtotal: order.subtotal,
+      ShippingCost: order.shippingCost,
+      Discount: order.discountAmount,
+      Total: order.totalAmount,
+      City: order.shippingCity,
+      State: order.shippingState,
+      Country: order.shippingCountry
+    }));
+
+    const parser = new Parser();
+    return parser.parse(data);
+
+  } catch (error) {
+    throw new Error(`Error exporting orders to CSV: ${error.message}`);
+  }
+};
+
+/**
+ * 📄 Export statistics to PDF
+ * REFACTORED: Moved from controller
+ */
+const exportOrderStatsToPDF = async ({ period = "30d" }) => {
+  try {
+    let dateFilter = {};
+    const now = new Date();
+    const days = { "7d": 7, "30d": 30, "90d": 90 }[period] || 30;
+    const startPeriod = new Date(now);
+    startPeriod.setDate(startPeriod.getDate() - days);
+    dateFilter = { createdAt: { [Op.gte]: startPeriod } };
+
+    const totalOrders = await Order.count({ where: dateFilter });
+    const totalRevenue = await Order.sum("totalAmount", {
+      where: { ...dateFilter, paymentStatus: "paid" }
+    }) || 0;
+
+    const ordersByStatus = await Order.findAll({
+      where: dateFilter,
+      attributes: [
+        "orderStatus",
+        [sequelize.fn("COUNT", sequelize.col("id")), "count"]
+      ],
+      group: ["orderStatus"],
+      raw: true
+    });
+
+    // Create PDF
+    const doc = new PDFDocument({ margin: 50 });
+
+    // Header
+    doc.fontSize(24).text("Order Statistics Report", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(12).text(`Period: Last ${days} days`, { align: "center" });
+    doc.fontSize(10).text(`Generated: ${new Date().toLocaleString()}`, { align: "center" });
+    doc.moveDown(2);
+
+    // Overview
+    doc.fontSize(16).text("Overview");
+    doc.moveDown();
+    doc.fontSize(12);
+    doc.text(`Total Orders: ${totalOrders}`);
+    doc.text(`Total Revenue: $${totalRevenue.toFixed(2)}`);
+    doc.text(`Average Order Value: $${(totalRevenue / totalOrders || 0).toFixed(2)}`);
+    doc.moveDown(2);
+
+    // Order Status
+    doc.fontSize(16).text("Orders by Status");
+    doc.moveDown();
+    doc.fontSize(12);
+    ordersByStatus.forEach(status => {
+      doc.text(`${status.orderStatus}: ${status.count} orders`);
+    });
+
+    doc.end();
+
+    return doc;
+
+  } catch (error) {
+    throw new Error(`Error exporting stats to PDF: ${error.message}`);
+  }
+};
+
 module.exports = {
   createOrder,
   getUserOrders,
@@ -833,4 +1375,10 @@ module.exports = {
   updateOrderPaymentStatus,
   updateOrderStatus,
   cancelOrder,
+  getAllOrdersAdmin,
+  addTrackingNumber,
+  addAdminNotes,
+  getOrderStatistics,
+  exportOrdersToCSV,
+  exportOrderStatsToPDF
 };

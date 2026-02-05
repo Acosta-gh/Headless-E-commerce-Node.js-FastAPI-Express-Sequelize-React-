@@ -13,7 +13,7 @@ const Order = sequelize.define(
     couponCode: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      comment: 'Coupon code snapshot',
+      comment: 'Coupon code snapshot (historical)',
     },
     couponDiscount: {
       type: DataTypes.DECIMAL(10, 2),
@@ -152,15 +152,6 @@ const Order = sequelize.define(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
       comment: 'Final total: subtotal + shippingCost + tax + surchargeAmount - discountAmount',
-    },
-
-    // =====================
-    // Coupons & Discounts
-    // =====================
-    couponCode: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      comment: 'Applied coupon code',
     },
 
     // =====================

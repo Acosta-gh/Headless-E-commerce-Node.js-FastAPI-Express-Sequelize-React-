@@ -1,63 +1,77 @@
 import axios from "axios";
 
 let API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1/";
-const ORDERS_URL = API_URL + "order";
+const ORDER_URL = API_URL + "order";
 
 // =====================
 // User Order Services
 // =====================
 
 /**
+ * Create new order
+ * @param {Object} orderData - Order data
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Created order
+ * @throws {Error} Network or server error
+ */
+export const createOrder = async (orderData, token) => {
+  const response = await axios.post(ORDER_URL, orderData, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  return response.data;
+};
+
+/**
  * Get all orders for logged-in user
- * GET /api/v1/order
+ * @param {string} token - Authorization token
+ * @returns {Promise<Array>} List of user orders
+ * @throws {Error} Network or server error
  */
 export const getUserOrders = async (token) => {
-  const response = await axios.get(ORDERS_URL, {
+  const response = await axios.get(ORDER_URL, {
     headers: {
-      Authorization: `Bearer ${token}`,
-    },
+      'Authorization': `Bearer ${token}`
+    }
   });
   return response.data;
 };
 
 /**
  * Get specific order by ID (user's own order)
- * GET /api/v1/order/:orderId
+ * @param {string} orderId - Order ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Order data
+ * @throws {Error} Network or server error
  */
 export const getOrderById = async (orderId, token) => {
-  const response = await axios.get(`${ORDERS_URL}/${orderId}`, {
+  const response = await axios.get(`${ORDER_URL}/${orderId}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
-    },
+      'Authorization': `Bearer ${token}`
+    }
   });
   return response.data;
 };
 
 /**
- * Create new order
- * POST /api/v1/order
- */
-export const createOrder = async (orderData, token) => {
-  const response = await axios.post(ORDERS_URL, orderData, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  return response.data;
-};
-
-/**
- * Cancel order (user's own unpaid order)
- * POST /api/v1/order/:orderId/cancel
+ * Cancel order (user's own order)
+ * @param {string} orderId - Order ID
+ * @param {string} reason - Cancellation reason
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Cancelled order
+ * @throws {Error} Network or server error
  */
 export const cancelOrder = async (orderId, reason, token) => {
   const response = await axios.post(
-    `${ORDERS_URL}/${orderId}/cancel`,
+    `${ORDER_URL}/${orderId}/cancel`,
     { reason },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
@@ -69,64 +83,78 @@ export const cancelOrder = async (orderId, reason, token) => {
 
 /**
  * Get all orders (admin)
- * GET /api/v1/order/admin/all?status=&limit=&offset=
+ * @param {string} token - Authorization token
+ * @param {Object} params - Query params (status, limit, offset)
+ * @returns {Promise<Object>} Orders with pagination
+ * @throws {Error} Network or server error
  */
-export const getAllOrdersAdmin = async (token, { status, limit = 50, offset = 0 } = {}) => {
-  const params = new URLSearchParams();
-  if (status) params.append("status", status);
-  params.append("limit", limit);
-  params.append("offset", offset);
-
-  const response = await axios.get(`${ORDERS_URL}/admin/all?${params.toString()}`, {
+export const getAllOrders = async (token, params = {}) => {
+  const response = await axios.get(`${ORDER_URL}/admin/all`, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      'Authorization': `Bearer ${token}`
     },
+    params
   });
   return response.data;
 };
 
 /**
  * Get order by ID (admin - any order)
- * GET /api/v1/order/admin/:orderId
+ * @param {string} orderId - Order ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Order data
+ * @throws {Error} Network or server error
  */
 export const getOrderByIdAdmin = async (orderId, token) => {
-  const response = await axios.get(`${ORDERS_URL}/admin/${orderId}`, {
+  const response = await axios.get(`${ORDER_URL}/admin/${orderId}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
-    },
+      'Authorization': `Bearer ${token}`
+    }
   });
   return response.data;
 };
 
 /**
  * Update payment status manually (admin)
- * PATCH /api/v1/order/:orderId/payment
+ * @param {string} orderId - Order ID
+ * @param {Object} paymentData - { paymentStatus, note }
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Updated order
+ * @throws {Error} Network or server error
  */
-export const updatePaymentStatus = async (orderId, paymentStatus, note, token) => {
+export const updatePaymentManually = async (orderId, paymentStatus, note, token) => {
+  console.log("token", token);
+
   const response = await axios.patch(
-    `${ORDERS_URL}/${orderId}/payment`,
+    `${ORDER_URL}/${orderId}/payment`,
     { paymentStatus, note },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
 };
 
 /**
- * Update order status (admin)
- * PATCH /api/v1/order/:orderId/status
+ * Update order status manually (admin)
+ * @param {string} orderId - Order ID
+ * @param {Object} statusData - { orderStatus }
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Updated order
+ * @throws {Error} Network or server error
  */
 export const updateOrderStatus = async (orderId, orderStatus, token) => {
   const response = await axios.patch(
-    `${ORDERS_URL}/${orderId}/status`,
+    `${ORDER_URL}/${orderId}/status`,
     { orderStatus },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
@@ -134,33 +162,46 @@ export const updateOrderStatus = async (orderId, orderStatus, token) => {
 
 /**
  * Add tracking number (admin)
- * PATCH /api/v1/order/admin/:orderId/tracking
+ * @param {string} orderId - Order ID
+ * @param {Object} trackingData - { trackingNumber, carrierName }
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Updated order
+ * @throws {Error} Network or server error
  */
 export const addTrackingNumber = async (orderId, trackingNumber, carrierName, token) => {
   const response = await axios.patch(
-    `${ORDERS_URL}/admin/${orderId}/tracking`,
-    { trackingNumber, carrierName },
+    `${ORDER_URL}/admin/${orderId}/tracking`,
+    {
+      trackingNumber,
+      carrierName
+    },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
 };
 
 /**
- * Add admin notes
- * PATCH /api/v1/order/admin/:orderId/notes
+ * Add admin notes to order
+ * @param {string} orderId - Order ID
+ * @param {Object} notesData - { adminNotes }
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Updated order
+ * @throws {Error} Network or server error
  */
 export const addAdminNotes = async (orderId, adminNotes, token) => {
   const response = await axios.patch(
-    `${ORDERS_URL}/admin/${orderId}/notes`,
+    `${ORDER_URL}/admin/${orderId}/notes`,
     { adminNotes },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
@@ -168,30 +209,106 @@ export const addAdminNotes = async (orderId, adminNotes, token) => {
 
 /**
  * Cancel order (admin - any order)
- * POST /api/v1/order/admin/:orderId/cancel
+ * @param {string} orderId - Order ID
+ * @param {string} reason - Cancellation reason
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} Cancelled order
+ * @throws {Error} Network or server error
  */
 export const cancelOrderAdmin = async (orderId, reason, token) => {
   const response = await axios.post(
-    `${ORDERS_URL}/admin/${orderId}/cancel`,
+    `${ORDER_URL}/admin/${orderId}/cancel`,
     { reason },
     {
       headers: {
-        Authorization: `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
     }
   );
   return response.data;
 };
 
+// =====================
+// Statistics Services
+// =====================
+
 /**
  * Get order statistics (admin)
- * GET /api/v1/order/admin/stats
+ * @param {string} token - Authorization token
+ * @param {Object} params - Query params (period, startDate, endDate)
+ * @returns {Promise<Object>} Statistics data
+ * @throws {Error} Network or server error
  */
-export const getOrderStats = async (token) => {
-  const response = await axios.get(`${ORDERS_URL}/admin/stats`, {
+export const getOrderStats = async (token, params = {}) => {
+  const response = await axios.get(`${ORDER_URL}/admin/stats`, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      'Authorization': `Bearer ${token}`
     },
+    params
   });
   return response.data;
 };
+
+/**
+ * Export statistics to CSV (admin)
+ * @param {string} token - Authorization token
+ * @param {Object} params - Query params (startDate, endDate)
+ * @returns {Promise<Blob>} CSV file
+ * @throws {Error} Network or server error
+ */
+export const exportStatsToCSV = async (token, params = {}) => {
+  const response = await axios.get(`${ORDER_URL}/admin/stats/export/csv`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    params,
+    responseType: 'blob'
+  });
+  return response.data;
+};
+
+/**
+ * Export statistics to PDF (admin)
+ * @param {string} token - Authorization token
+ * @param {Object} params - Query params (period)
+ * @returns {Promise<Blob>} PDF file
+ * @throws {Error} Network or server error
+ */
+export const exportStatsToPDF = async (token, params = {}) => {
+  const response = await axios.get(`${ORDER_URL}/admin/stats/export/pdf`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    params,
+    responseType: 'blob'
+  });
+  return response.data;
+};
+
+// =====================
+// Webhook Services
+// =====================
+
+/**
+ * Update payment from webhook
+ * @param {string} orderId - Order ID
+ * @param {Object} webhookData - Webhook payload
+ * @param {string} webhookSecret - Webhook secret
+ * @returns {Promise<Object>} Updated order
+ * @throws {Error} Network or server error
+ 
+export const updatePaymentFromWebhook = async (orderId, webhookData, webhookSecret) => {
+  const response = await axios.patch(
+    `${ORDER_URL}/${orderId}/payment/webhook`,
+    webhookData,
+    {
+      headers: {
+        'X-Webhook-Secret': webhookSecret,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response.data;
+};
+*/

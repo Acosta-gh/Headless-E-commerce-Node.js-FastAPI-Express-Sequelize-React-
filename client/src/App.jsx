@@ -31,6 +31,7 @@ const OrdersPage = lazy(() => import("./pages/OrdersPage.jsx"));
 const ShippingMethods = lazy(() => import("./pages/ShippingMethods.jsx"));
 const Coupons = lazy(() => import("./pages/Coupons.jsx"));
 const Payments = lazy(() => import("./pages/Payments.jsx"));
+const Stats = lazy(() => import("./pages/Stats.jsx"));
 
 // 🔐 Protected Routes
 function ProtectedRoute({ children, requireAdmin = false }) {
@@ -93,6 +94,16 @@ const router = createHashRouter([
           <ProtectedRoute requireAdmin={true}>
             <Suspense fallback={<Loading />}>
               <ManageArticesPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/stats",
+        element: (
+          <ProtectedRoute requireAdmin={true}>
+            <Suspense fallback={<Loading />}>
+              <Stats /> 
             </Suspense>
           </ProtectedRoute>
         ),

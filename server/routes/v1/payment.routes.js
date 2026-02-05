@@ -44,7 +44,7 @@ router.get("/admin/:id", verifyJWT, isAdmin, genericLimiter, getPaymentMethodByI
  * Create payment method (admin)
  * POST /api/v1/payment/admin
  */
-router.post("/admin", verifyJWT, isAdmin, genericLimiter, createPaymentMethod);
+//router.post("/admin", verifyJWT, isAdmin, genericLimiter, createPaymentMethod);
 
 /**
  * Update payment method (admin)
@@ -62,6 +62,6 @@ router.patch("/admin/:id/toggle", verifyJWT, isAdmin, genericLimiter, togglePaym
  * Delete payment method (admin)
  * DELETE /api/v1/payment/admin/:id
  */
-router.delete("/admin/:id", verifyJWT, isAdmin, genericLimiter, deletePaymentMethod);
+//router.delete("/admin/:id", verifyJWT, isAdmin, genericLimiter, deletePaymentMethod);
 
 module.exports = router;

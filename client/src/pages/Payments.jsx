@@ -76,7 +76,8 @@ function Payments() {
         code: "",
         description: "",
         provider: "",
-        feePercentage: "",
+        surchargePercentage: "",
+        discountPercentage: "",
     });
 
     // -------------------
@@ -89,7 +90,8 @@ function Payments() {
             code: payment.code || "",
             description: payment.description || "",
             provider: payment.provider || "",
-            feePercentage: payment.feePercentage ?? "",
+            surchargePercentage: payment.surchargePercentage ?? "",
+            discountPercentage: payment.discountPercentage ?? "",
         });
         setEditDialog(true);
     };
@@ -100,7 +102,8 @@ function Payments() {
             code: "",
             description: "",
             provider: "",
-            feePercentage: "",
+            surchargePercentage: "",
+            discountPercentage: "",
         });
         setCreateDialog(true);
     };
@@ -123,7 +126,9 @@ function Payments() {
 
         const updateData = {
             ...formData,
-            feePercentage: formData.feePercentage === "" ? null : parseFloat(formData.feePercentage),
+            //surchargePercentage: formData.surchargePercentage === "" ? 0 : parseFloat(formData.surchargePercentage),
+            discountPercentage: formData.discountPercentage === "" ? 0 : parseFloat(formData.discountPercentage),
+            surchargePercentage: 0,
         };
 
         const success = await updatePayment(selectedPayment.id, updateData);
@@ -136,7 +141,9 @@ function Payments() {
     const handleCreate = async () => {
         const createData = {
             ...formData,
-            feePercentage: formData.feePercentage === "" ? null : parseFloat(formData.feePercentage),
+            //surchargePercentage: formData.surchargePercentage === "" ? 0 : parseFloat(formData.surchargePercentage),
+            discountPercentage: formData.discountPercentage === "" ? 0 : parseFloat(formData.discountPercentage),
+            surchargePercentage: 0,
         };
 
         const success = await createPayment(createData);
@@ -147,7 +154,7 @@ function Payments() {
                 code: "",
                 description: "",
                 provider: "",
-                feePercentage: "",
+                surchargePercentage: "",
             });
         }
     };
@@ -190,10 +197,12 @@ function Payments() {
                         <Button variant="outline" onClick={fetchPaymentMethods}>
                             Refresh
                         </Button>
+                        {/*
                         <Button onClick={handleOpenCreate}>
                             <Plus className="h-4 w-4 mr-2" />
                             Add Method
                         </Button>
+                          */}
                     </div>
                 </div>
 
@@ -226,9 +235,8 @@ function Payments() {
                             {paymentMethods.map((payment) => (
                                 <Card
                                     key={payment.id}
-                                    className={`${
-                                        payment.enabled ? "" : "opacity-60 bg-muted/50"
-                                    } hover:shadow-lg transition-shadow`}
+                                    className={`${payment.enabled ? "" : "opacity-60 bg-muted/50"
+                                        } hover:shadow-lg transition-shadow`}
                                 >
                                     <CardHeader>
                                         <div className="flex items-start justify-between">
@@ -261,14 +269,26 @@ function Payments() {
 
                                         {/* Info */}
                                         <div className="space-y-3 text-sm">
-                                            {payment.feePercentage != null && (
-                                                <div className="flex items-center justify-between">
+                                            {payment.surchargePercentage != null && (
+                                                <div className="flex items-center justify-between hidden">
                                                     <span className="flex items-center gap-2 text-muted-foreground">
                                                         <DollarSign className="h-4 w-4" />
                                                         Fee
                                                     </span>
                                                     <span className="font-medium">
-                                                        {payment.feePercentage}%
+                                                        {payment.surchargePercentage}%
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {payment.surchargePercentage != null && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="flex items-center gap-2 text-muted-foreground">
+                                                        <DollarSign className="h-4 w-4" />
+                                                        Discount
+                                                    </span>
+                                                    <span className="font-medium">
+                                                        {payment.discountPercentage}%
                                                     </span>
                                                 </div>
                                             )}
@@ -302,11 +322,10 @@ function Payments() {
                                             onClick={() => handleToggle(payment)}
                                         >
                                             <Power
-                                                className={`h-4 w-4 ${
-                                                    payment.enabled
-                                                        ? "text-green-600"
-                                                        : "text-gray-400"
-                                                }`}
+                                                className={`h-4 w-4 ${payment.enabled
+                                                    ? "text-green-600"
+                                                    : "text-gray-400"
+                                                    }`}
                                             />
                                         </Button>
 
@@ -381,16 +400,29 @@ function Payments() {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="feePercentage">Fee Percentage</Label>
+                        <div className="space-y-2 hidden">
+                            <Label htmlFor="surchargePercentage">Fee Percentage</Label>
                             <Input
-                                id="feePercentage"
-                                name="feePercentage"
+                                id="surchargePercentage"
+                                name="surchargePercentage"
                                 type="number"
                                 step="0.01"
-                                value={formData.feePercentage}
+                                value={formData.surchargePercentage}
                                 onChange={handleChange}
-                                placeholder="e.g., 2.9"
+                                placeholder="e.g., 10"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="discountPercentage">Discount Percentage</Label>
+                            <Input
+                                id="discountPercentage"
+                                name="discountPercentage"
+                                type="number"
+                                step="0.01"
+                                value={formData.discountPercentage}
+                                onChange={handleChange}
+                                placeholder="e.g., 10"
                             />
                         </div>
                     </div>
@@ -404,7 +436,7 @@ function Payments() {
                 </DialogContent>
             </Dialog>
 
-            {/* Create Dialog */}
+            {/* Create Dialog
             <Dialog open={createDialog} onOpenChange={setCreateDialog}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
@@ -461,13 +493,13 @@ function Payments() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="create-feePercentage">Fee Percentage</Label>
+                            <Label htmlFor="create-surchargePercentage">Fee Percentage</Label>
                             <Input
-                                id="create-feePercentage"
-                                name="feePercentage"
+                                id="create-surchargePercentage"
+                                name="surchargePercentage"
                                 type="number"
                                 step="0.01"
-                                value={formData.feePercentage}
+                                value={formData.surchargePercentage}
                                 onChange={handleChange}
                                 placeholder="e.g., 2.9"
                             />
@@ -482,6 +514,7 @@ function Payments() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            */}
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={deleteDialog} onOpenChange={setDeleteDialog}>
@@ -489,7 +522,7 @@ function Payments() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will disable the payment method "{selectedPayment?.name}". 
+                            This will disable the payment method "{selectedPayment?.name}".
                             You can re-enable it later if needed.
                         </AlertDialogDescription>
                     </AlertDialogHeader>

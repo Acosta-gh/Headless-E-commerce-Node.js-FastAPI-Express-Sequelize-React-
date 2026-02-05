@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useCoupons } from "@/hooks/useCoupons";
+import { useArticles } from "@/hooks/useArticles";
+import { useCategories } from "@/hooks/useCategories";
 import { Fade } from "react-awesome-reveal";
 
 import {
@@ -50,24 +52,94 @@ import {
   Calendar,
   Users,
   X,
+  Package,
+  Layers,
 } from "lucide-react";
 
 // =====================
-// Helper: parse JSON array fields (IDs stored as comma-separated input)
+// Multi-Select Dropdown Component
 // =====================
-const parseIdList = (value) => {
-  if (!value || value.trim() === "") return null;
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => !isNaN(n));
-};
+const MultiSelect = ({ 
+  options = [], 
+  value = [], 
+  onChange, 
+  placeholder = "Select items...",
+  label,
+  icon: Icon
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
 
-const formatIdList = (arr) => {
-  if (!arr || !Array.isArray(arr) || arr.length === 0) return "";
-  return arr.join(", ");
+  const toggleItem = (id) => {
+    const newValue = value.includes(id)
+      ? value.filter(v => v !== id)
+      : [...value, id];
+    onChange(newValue);
+  };
+
+  const selectedLabels = options
+    .filter(opt => value.includes(opt.id))
+    .map(opt => opt.label || opt.name || opt.title)
+    .join(", ");
+
+  return (
+    <div className="relative">
+      <div
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background cursor-pointer hover:bg-accent"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className={`flex items-center gap-2 ${!selectedLabels ? "text-muted-foreground" : ""}`}>
+          {Icon && <Icon className="h-4 w-4" />}
+          {selectedLabels || placeholder}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {value.length > 0 && `(${value.length})`}
+        </span>
+      </div>
+
+      {isOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="absolute z-50 w-full mt-1 max-h-60 overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+            <div className="p-2">
+              {options.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  No options available
+                </div>
+              ) : (
+                options.map((option) => (
+                  <div
+                    key={option.id}
+                    className="flex items-center space-x-2 rounded-sm px-2 py-1.5 cursor-pointer hover:bg-accent"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleItem(option.id);
+                    }}
+                  >
+                    <div className={`h-4 w-4 border rounded flex items-center justify-center ${
+                      value.includes(option.id) ? "bg-primary border-primary" : "border-input"
+                    }`}>
+                      {value.includes(option.id) && (
+                        <svg className="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-sm">
+                      {option.label || option.name || option.title}
+                      {option.sku && <span className="text-xs text-muted-foreground ml-1">({option.sku})</span>}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 function Coupons() {
@@ -76,13 +148,16 @@ function Coupons() {
   // -------------------
   const {
     coupons,
-    loading,
+    loading: couponsLoading,
     fetchCouponStats,
     handleCreateCoupon,
     handleUpdateCoupon,
     handleToggleStatus,
     handleDeleteCoupon,
   } = useCoupons();
+
+  const { articles, loading: articlesLoading } = useArticles();
+  const { categories, loading: categoriesLoading } = useCategories();
 
   // -------------------
   //      📦 State
@@ -98,7 +173,7 @@ function Coupons() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   // =====================
-  // Form state — matches every field in Coupon model
+  // Form state — usando arrays para los selects
   // =====================
   const initialForm = {
     code: "",
@@ -112,11 +187,11 @@ function Coupons() {
     // Usage limits
     usageLimit: "",
     usagePerUser: "1",
-    // Product / category restrictions (comma-separated IDs)
-    appliesToProducts: "",
-    appliesToCategories: "",
-    excludedProducts: "",
-    excludedCategories: "",
+    // Product / category restrictions (ahora arrays de IDs)
+    appliesToProducts: [],
+    appliesToCategories: [],
+    excludedProducts: [],
+    excludedCategories: [],
     // User restrictions
     specificUsers: "",
     newUsersOnly: false,
@@ -165,6 +240,23 @@ function Coupons() {
 
   const isExpired = (c) => c.expiresAt && new Date(c.expiresAt) < new Date();
 
+  // Helper para mostrar nombres de productos/categorías
+  const getProductNames = (ids) => {
+    if (!ids || ids.length === 0) return null;
+    return articles
+      .filter(a => ids.includes(a.id))
+      .map(a => a.title)
+      .join(", ");
+  };
+
+  const getCategoryNames = (ids) => {
+    if (!ids || ids.length === 0) return null;
+    return categories
+      .filter(c => ids.includes(c.id))
+      .map(c => c.name)
+      .join(", ");
+  };
+
   // -------------------
   //     🖐️ Handlers
   // -------------------
@@ -175,6 +267,10 @@ function Coupons() {
 
   const handleSwitch = (name, checked) => {
     setForm((prev) => ({ ...prev, [name]: checked }));
+  };
+
+  const handleArrayChange = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const resetForm = () => setForm(initialForm);
@@ -191,12 +287,12 @@ function Coupons() {
     minOrderAmount: form.minOrderAmount ? parseFloat(form.minOrderAmount) : null,
     usageLimit: form.usageLimit ? parseInt(form.usageLimit) : null,
     usagePerUser: form.usagePerUser ? parseInt(form.usagePerUser) : 1,
-    // JSON array fields
-    appliesToProducts: parseIdList(form.appliesToProducts),
-    appliesToCategories: parseIdList(form.appliesToCategories),
-    excludedProducts: parseIdList(form.excludedProducts),
-    excludedCategories: parseIdList(form.excludedCategories),
-    specificUsers: parseIdList(form.specificUsers),
+    // JSON array fields (ya son arrays)
+    appliesToProducts: form.appliesToProducts.length > 0 ? form.appliesToProducts : null,
+    appliesToCategories: form.appliesToCategories.length > 0 ? form.appliesToCategories : null,
+    excludedProducts: form.excludedProducts.length > 0 ? form.excludedProducts : null,
+    excludedCategories: form.excludedCategories.length > 0 ? form.excludedCategories : null,
+    specificUsers: form.specificUsers ? form.specificUsers.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : null,
     // Booleans
     newUsersOnly: form.newUsersOnly,
     combinable: form.combinable,
@@ -227,11 +323,11 @@ function Coupons() {
       minOrderAmount: coupon.minOrderAmount?.toString() || "",
       usageLimit: coupon.usageLimit?.toString() || "",
       usagePerUser: coupon.usagePerUser?.toString() || "1",
-      appliesToProducts: formatIdList(coupon.appliesToProducts),
-      appliesToCategories: formatIdList(coupon.appliesToCategories),
-      excludedProducts: formatIdList(coupon.excludedProducts),
-      excludedCategories: formatIdList(coupon.excludedCategories),
-      specificUsers: formatIdList(coupon.specificUsers),
+      appliesToProducts: coupon.appliesToProducts || [],
+      appliesToCategories: coupon.appliesToCategories || [],
+      excludedProducts: coupon.excludedProducts || [],
+      excludedCategories: coupon.excludedCategories || [],
+      specificUsers: coupon.specificUsers ? coupon.specificUsers.join(", ") : "",
       newUsersOnly: coupon.newUsersOnly || false,
       combinable: coupon.combinable || false,
       combineWithPaymentDiscount: coupon.combineWithPaymentDiscount ?? true,
@@ -264,9 +360,28 @@ function Coupons() {
     }
   };
 
+  // Preparar opciones para los dropdowns
+  const productOptions = useMemo(() => {
+    return (articles || []).map(a => ({
+      id: a.id,
+      title: a.title,
+      sku: a.sku,
+      label: a.title, // Para compatibilidad con MultiSelect
+    }));
+  }, [articles]);
+
+  const categoryOptions = useMemo(() => {
+    return (categories || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      label: c.name, // Para compatibilidad con MultiSelect
+    }));
+  }, [categories]);
+
   // -------------------
   //  🔄 Early Returns
   // -------------------
+  const loading = couponsLoading || articlesLoading || categoriesLoading;
   if (loading && coupons.length === 0) return <Loading />;
 
   // -------------------
@@ -357,29 +472,53 @@ function Coupons() {
 
       <Separator />
 
-      {/* ── Product / Category restrictions ── */}
+      {/* ── Product & Category Restrictions ── */}
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product & Category Restrictions</p>
-      <p className="text-xs text-muted-foreground -mt-3">Enter IDs separated by commas, e.g. 1, 5, 10. Leave empty to apply to all.</p>
+      <p className="text-xs text-muted-foreground -mt-3">Select products and categories. Leave empty to apply to all.</p>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4">
         <div>
-          <Label htmlFor="appliesToProducts">Applies To Products</Label>
-          <Input id="appliesToProducts" name="appliesToProducts" value={form.appliesToProducts} onChange={handleChange} placeholder="1, 5, 10" />
+          <Label>Applies To Products</Label>
+          <MultiSelect
+            options={productOptions}
+            value={form.appliesToProducts}
+            onChange={(val) => handleArrayChange("appliesToProducts", val)}
+            placeholder="All products"
+            icon={Package}
+          />
         </div>
-        <div>
-          <Label htmlFor="appliesToCategories">Applies To Categories</Label>
-          <Input id="appliesToCategories" name="appliesToCategories" value={form.appliesToCategories} onChange={handleChange} placeholder="2, 7" />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="excludedProducts">Excluded Products</Label>
-          <Input id="excludedProducts" name="excludedProducts" value={form.excludedProducts} onChange={handleChange} placeholder="3, 8" />
+          <Label>Applies To Categories</Label>
+          <MultiSelect
+            options={categoryOptions}
+            value={form.appliesToCategories}
+            onChange={(val) => handleArrayChange("appliesToCategories", val)}
+            placeholder="All categories"
+            icon={Layers}
+          />
         </div>
+
         <div>
-          <Label htmlFor="excludedCategories">Excluded Categories</Label>
-          <Input id="excludedCategories" name="excludedCategories" value={form.excludedCategories} onChange={handleChange} placeholder="4" />
+          <Label>Excluded Products</Label>
+          <MultiSelect
+            options={productOptions}
+            value={form.excludedProducts}
+            onChange={(val) => handleArrayChange("excludedProducts", val)}
+            placeholder="No exclusions"
+            icon={Package}
+          />
+        </div>
+
+        <div>
+          <Label>Excluded Categories</Label>
+          <MultiSelect
+            options={categoryOptions}
+            value={form.excludedCategories}
+            onChange={(val) => handleArrayChange("excludedCategories", val)}
+            placeholder="No exclusions"
+            icon={Layers}
+          />
         </div>
       </div>
 
@@ -389,7 +528,7 @@ function Coupons() {
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">User Restrictions</p>
 
       <div>
-        <Label htmlFor="specificUsers">Specific Users (IDs)</Label>
+        <Label htmlFor="specificUsers">Specific Users (IDs, comma-separated)</Label>
         <Input id="specificUsers" name="specificUsers" value={form.specificUsers} onChange={handleChange} placeholder="Leave empty for all users" />
       </div>
 
@@ -605,16 +744,26 @@ function Coupons() {
                         {coupon.newUsersOnly && <Badge variant="outline" className="text-xs">New Users Only</Badge>}
                         {coupon.combinable && <Badge variant="outline" className="text-xs">Combinable</Badge>}
                         {coupon.appliesToProducts?.length > 0 && (
-                          <Badge variant="outline" className="text-xs">Products: {coupon.appliesToProducts.join(", ")}</Badge>
+                          <Badge variant="outline" className="text-xs" title={getProductNames(coupon.appliesToProducts)}>
+                            <Package className="h-3 w-3 mr-1" />
+                            {coupon.appliesToProducts.length} Product{coupon.appliesToProducts.length > 1 ? 's' : ''}
+                          </Badge>
                         )}
                         {coupon.appliesToCategories?.length > 0 && (
-                          <Badge variant="outline" className="text-xs">Categories: {coupon.appliesToCategories.join(", ")}</Badge>
+                          <Badge variant="outline" className="text-xs" title={getCategoryNames(coupon.appliesToCategories)}>
+                            <Layers className="h-3 w-3 mr-1" />
+                            {coupon.appliesToCategories.length} Categor{coupon.appliesToCategories.length > 1 ? 'ies' : 'y'}
+                          </Badge>
                         )}
                         {coupon.excludedProducts?.length > 0 && (
-                          <Badge variant="outline" className="text-xs text-destructive">Excl. Products: {coupon.excludedProducts.join(", ")}</Badge>
+                          <Badge variant="outline" className="text-xs text-destructive" title={getProductNames(coupon.excludedProducts)}>
+                            Excl. {coupon.excludedProducts.length} Product{coupon.excludedProducts.length > 1 ? 's' : ''}
+                          </Badge>
                         )}
                         {coupon.specificUsers?.length > 0 && (
-                          <Badge variant="outline" className="text-xs">Users: {coupon.specificUsers.join(", ")}</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {coupon.specificUsers.length} User{coupon.specificUsers.length > 1 ? 's' : ''}
+                          </Badge>
                         )}
                       </div>
                     </CardContent>

@@ -1,83 +1,111 @@
 'use strict';
 
-const shippingMethods = [
-  {
-    code: 'standard',
-    name: 'Envío Estándar',
-    enabled: true,
-    baseCost: 5.99,
-    freeShippingThreshold: 50.00,
-    estimatedDaysMin: 3,
-    estimatedDaysMax: 5,
-    regionalPricing: null,
-    postalCodeRules: null,
-    useWeightPricing: false,
-    weightPricingRules: null,
-    availableCountries: ['AR', 'CL', 'UY'],
-    unavailablePostalCodes: null,
-    description: 'Envío estándar a todo el país',
-    icon: 'truck',
-    displayOrder: 1,
-    carrierName: 'Correo Argentino',
-    trackingUrlTemplate: 'https://www.correoargentino.com.ar/seguimiento?codigo={trackingNumber}',
-    requiresAddress: true,
-    allowCashOnDelivery: true,
-    maxOrderValue: null,
-  },
+const ARGENTINA_PROVINCES = [
+  "Buenos Aires", "Capital Federal", "Catamarca", "Chaco", "Chubut",
+  "Córdoba", "Corrientes", "Entre Ríos", "Formosa", "Jujuy",
+  "La Pampa", "La Rioja", "Mendoza", "Misiones", "Neuquén",
+  "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz",
+  "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán"
 ];
+
+const applyStrictProvinceRules = (inputRules = {}) => {
+  const cleanRules = { ...inputRules };
+  const sanitizedProvinces = {};
+  const inputProvinces = cleanRules.provinces || {};
+
+  ARGENTINA_PROVINCES.forEach(province => {
+    if (inputProvinces[province]) {
+      sanitizedProvinces[province] = {
+        cost: parseFloat(inputProvinces[province].cost || 0),
+        available: inputProvinces[province].available !== false
+      };
+    }
+  });
+
+  cleanRules.provinces = sanitizedProvinces;
+  return cleanRules;
+};
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    console.log('🚚 Seeding shipping methods...');
-    
-    const timestamp = new Date();
-    const codes = shippingMethods.map(m => m.code);
-
-    await queryInterface.bulkDelete('shipping_methods', {
-      code: codes
-    });
-    console.log('🗑️  Registros anteriores eliminados');
+    const shippingMethods = [
+      {
+        code: "correo_standard",
+        name: "Correo Argentino Estándar",
+        carrierName: "Correo Argentino",
+        description: "Entrega a domicilio en todo el país",
+        baseCost: 1500,
+        rules: JSON.stringify(applyStrictProvinceRules({
+          provinces: {
+            "Buenos Aires": { cost: 1200 },
+            "Capital Federal": { cost: 1000 },
+          },
+          bulkyExtra: 500,
+          freeShippingThreshold: 20000
+        })),
+        enabled: true,
+        displayOrder: 1,
+        estimatedDaysMin: 3,
+        estimatedDaysMax: 7,
+        icon: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        code: "oca_express",
+        name: "OCA Express",
+        carrierName: "OCA",
+        description: "Entrega rápida en todo el país",
+        baseCost: 2500,
+        rules: JSON.stringify(applyStrictProvinceRules({
+          provinces: {
+            "Buenos Aires": { cost: 2000 },
+            "Capital Federal": { cost: 1800 },
+          },
+          bulkyExtra: 800,
+          freeShippingThreshold: 30000
+        })),
+        enabled: true,
+        displayOrder: 2,
+        estimatedDaysMin: 1,
+        estimatedDaysMax: 4,
+        icon: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    ];
 
     for (const method of shippingMethods) {
-      await queryInterface.bulkInsert('shipping_methods', [
-        {
-          code: method.code,
-          name: method.name,
-          enabled: method.enabled,
-          baseCost: method.baseCost,
-          freeShippingThreshold: method.freeShippingThreshold,
-          estimatedDaysMin: method.estimatedDaysMin,
-          estimatedDaysMax: method.estimatedDaysMax,
-          regionalPricing: method.regionalPricing ? JSON.stringify(method.regionalPricing) : null,
-          postalCodeRules: method.postalCodeRules ? JSON.stringify(method.postalCodeRules) : null,
-          useWeightPricing: method.useWeightPricing,
-          weightPricingRules: method.weightPricingRules ? JSON.stringify(method.weightPricingRules) : null,
-          availableCountries: JSON.stringify(method.availableCountries),
-          unavailablePostalCodes: method.unavailablePostalCodes ? JSON.stringify(method.unavailablePostalCodes) : null,
-          description: method.description,
-          icon: method.icon,
-          displayOrder: method.displayOrder,
-          carrierName: method.carrierName,
-          trackingUrlTemplate: method.trackingUrlTemplate,
-          requiresAddress: method.requiresAddress,
-          allowCashOnDelivery: method.allowCashOnDelivery,
-          maxOrderValue: method.maxOrderValue,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        }
-      ]);
-    }
+      try {
+        const [existing] = await queryInterface.sequelize.query(
+          `SELECT id FROM shipping_methods WHERE code = :code LIMIT 1`,
+          {
+            replacements: { code: method.code },
+            type: Sequelize.QueryTypes.SELECT,
+          }
+        );
 
-    console.log('🎉 Shipping methods seeded successfully!');
+        if (!existing) {
+          await queryInterface.bulkInsert("shipping_methods", [method]);
+          console.log(`✅ Inserted shipping method: ${method.code}`);
+        } else {
+          console.log(`⚠️  Shipping method already exists: ${method.code}`);
+        }
+      } catch (error) {
+        console.log(`❌ Error inserting shipping method ${method.code}:`, error.message);
+        console.log(`⏭️  Continuing with next method...`);
+      }
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    console.log('🔄 Rolling back shipping methods seed...');
-    
-    await queryInterface.bulkDelete('shipping_methods', {
-      code: shippingMethods.map(m => m.code),
-    });
-    
-    console.log('✅ Rollback completed');
+    try {
+      await queryInterface.bulkDelete("shipping_methods", {
+        code: ["correo_standard", "oca_express"],
+      });
+      console.log("🗑️  Shipping methods removed");
+    } catch (error) {
+      console.log("⚠️  Error removing shipping methods:", error.message);
+    }
   }
 };

@@ -18,8 +18,12 @@ console.log('DIALECT:', process.env.DB_DIALECT);
 // Database configurations for different environments
 module.exports = {
   development: {
-    dialect: "sqlite",
-    storage: dbPath,
+    dialect: process.env.DB_DIALECT || "postgres",
+    username: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST || "localhost",
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME,
     logging: console.log,
   },
   test: {

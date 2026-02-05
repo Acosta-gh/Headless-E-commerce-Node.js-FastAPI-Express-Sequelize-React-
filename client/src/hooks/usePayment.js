@@ -52,11 +52,13 @@ export const usePayment = () => {
     const updatePayment = async (id, data) => {
         try {
             await updatePaymentMethod(id, data, token);
+            console.log(data);
             toast.success("Payment method updated successfully");
             await fetchPaymentMethods();
             return true;
         } catch (err) {
             const msg = err.response?.data?.error || "Error updating payment method";
+            console.log(err);
             toast.error(msg);
             return false;
         }

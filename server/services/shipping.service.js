@@ -1,41 +1,71 @@
 const { ShippingMethod } = require('@/models/shippingMethod.model');
 
+const ARGENTINA_PROVINCES = [
+  "Buenos Aires", "Capital Federal", "Catamarca", "Chaco", "Chubut",
+  "Córdoba", "Corrientes", "Entre Ríos", "Formosa", "Jujuy",
+  "La Pampa", "La Rioja", "Mendoza", "Misiones", "Neuquén",
+  "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz",
+  "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán"
+];
+
+/**
+ * 🛡️ Asegura que solo existan las provincias de la lista oficial
+ * 
+ * IMPORTANTE: Solo incluimos provincias que el admin configuró explícitamente.
+ * Las provincias NO configuradas permitirán que la cascada llegue al baseCost (precio nacional).
+ */
+const applyStrictProvinceRules = (inputRules = {}) => {
+  const cleanRules = { ...inputRules };
+  const sanitizedProvinces = {};
+  const inputProvinces = cleanRules.provinces || {};
+
+  // Solo procesamos provincias que están en la lista oficial Y fueron configuradas por el admin
+  ARGENTINA_PROVINCES.forEach(province => {
+    if (inputProvinces[province]) {
+      sanitizedProvinces[province] = {
+        cost: parseFloat(inputProvinces[province].cost || 0),
+        available: inputProvinces[province].available !== false
+      };
+    }
+    // NO creamos entry para provincias no configuradas
+    // Esto permite que la cascada llegue al baseCost (nacional)
+  });
+
+  cleanRules.provinces = sanitizedProvinces;
+  return cleanRules;
+};
+
 /**
  * Normalize address to internal format
- * Accepts both API format (city, state) and internal format (shippingCity, shippingState)
- * @private
  */
 const normalizeAddress = (address) => {
-  // If already in internal format, return as-is
   if (address.shippingCity !== undefined) {
     return address;
   }
 
-  // Transform API format to internal format
   return {
     shippingCity: address.city,
-    shippingState: address.state,
+    shippingState: address.state || address.province,
     shippingPostalCode: address.postalCode,
     shippingCountry: address.country,
   };
 };
 
 /**
- * Calculate shipping cost based on method, location, and order details
- * @param {number} shippingMethodId - ID of the shipping method
- * @param {Object} shippingAddress - Shipping address (accepts both API and internal format)
- * @param {number} orderSubtotal - Order subtotal amount
- * @param {number} orderWeight - Total order weight (optional)
- * @returns {Promise<Object>} Calculated shipping cost and details
+ * 💰 SISTEMA DE CASCADA DE PRECIOS
+ * 
+ * Orden de prioridad:
+ * 1. Código Postal (más específico)
+ * 2. Provincia (intermedio)
+ * 3. Base Cost = Precio Nacional (más general)
  */
 const calculateShippingCost = async (
   shippingMethodId,
   shippingAddress,
   orderSubtotal,
-  orderWeight = 0
+  isBulky = false
 ) => {
   try {
-    // Normalize address format
     const address = normalizeAddress(shippingAddress);
 
     const shippingMethod = await ShippingMethod.findByPk(shippingMethodId);
@@ -48,27 +78,17 @@ const calculateShippingCost = async (
       throw new Error('Shipping method is not available');
     }
 
-    // Check if method is available for this country
-    if (shippingMethod.availableCountries &&
-      !shippingMethod.availableCountries.includes(address.shippingCountry)) {
-      throw new Error(`Shipping method not available for ${address.shippingCountry}`);
-    }
-
-    // Check if postal code is unavailable
-    if (shippingMethod.unavailablePostalCodes &&
-      isPostalCodeUnavailable(address.shippingPostalCode, shippingMethod.unavailablePostalCodes)) {
-      throw new Error('Shipping not available for this postal code');
-    }
-
-    let shippingCost = parseFloat(shippingMethod.baseCost);
-
-    // Apply free shipping threshold
-    if (shippingMethod.freeShippingThreshold &&
-      orderSubtotal >= parseFloat(shippingMethod.freeShippingThreshold)) {
+    const rules = shippingMethod.rules || {};
+    
+    // =====================================================
+    // PASO 0: Verificar envío gratis por monto
+    // =====================================================
+    if (rules.freeShippingThreshold && orderSubtotal >= rules.freeShippingThreshold) {
       return {
         cost: 0,
-        originalCost: shippingCost,
+        originalCost: parseFloat(shippingMethod.baseCost),
         freeShipping: true,
+        appliedRule: 'freeShippingThreshold',
         estimatedDays: {
           min: shippingMethod.estimatedDaysMin,
           max: shippingMethod.estimatedDaysMax
@@ -76,49 +96,91 @@ const calculateShippingCost = async (
         method: {
           id: shippingMethod.id,
           code: shippingMethod.code,
-          name: shippingMethod.name
+          name: shippingMethod.name,
+          carrierName: shippingMethod.carrierName
         }
       };
     }
 
-    // Apply regional pricing
-    if (shippingMethod.regionalPricing && address.shippingState) {
-      const regionalCost = shippingMethod.regionalPricing[address.shippingState];
-      if (regionalCost !== undefined) {
-        shippingCost += parseFloat(regionalCost);
+    // =====================================================
+    // SISTEMA DE CASCADA - BÚSQUEDA POR PRIORIDAD
+    // =====================================================
+    
+    let finalCost = null;
+    let appliedRule = null;
+    let ruleDetails = {};
+
+    // -------------------------------------------------------
+    // NIVEL 1: Buscar por CÓDIGO POSTAL (más específico)
+    // -------------------------------------------------------
+    if (rules.postalCodes && address.shippingPostalCode) {
+      const postalCodeRule = rules.postalCodes[address.shippingPostalCode];
+
+      if (postalCodeRule) {
+        // Verificar disponibilidad
+        if (postalCodeRule.available === false) {
+          throw new Error(`Shipping not available for postal code ${address.shippingPostalCode}`);
+        }
+
+        // ✅ ENCONTRADO: Usar costo de código postal
+        finalCost = parseFloat(postalCodeRule.cost || 0);
+        appliedRule = 'postalCode';
+        ruleDetails = {
+          postalCode: address.shippingPostalCode,
+          cost: finalCost
+        };
       }
     }
 
-    // Apply postal code specific rules
-    if (shippingMethod.postalCodeRules) {
-      const postalCodeCost = getPostalCodeCost(
-        address.shippingPostalCode,
-        shippingMethod.postalCodeRules
-      );
-      if (postalCodeCost !== null) {
-        shippingCost += postalCodeCost;
+    // -------------------------------------------------------
+    // NIVEL 2: Buscar por PROVINCIA (si no hubo match en CP)
+    // -------------------------------------------------------
+    if (finalCost === null && rules.provinces && address.shippingState) {
+      const provinceRule = rules.provinces[address.shippingState];
+
+      if (provinceRule !== undefined) {
+        // Verificar disponibilidad
+        if (provinceRule.available === false) {
+          throw new Error(`Shipping not available for province ${address.shippingState}`);
+        }
+
+        // ✅ ENCONTRADO: Usar costo provincial
+        finalCost = parseFloat(provinceRule.cost || 0);
+        appliedRule = 'province';
+        ruleDetails = {
+          province: address.shippingState,
+          cost: finalCost
+        };
       }
+      // Si provinceRule === undefined, continuar a nivel 3 (nacional)
     }
 
-    // Apply weight-based pricing
-    if (shippingMethod.useWeightPricing &&
-      shippingMethod.weightPricingRules &&
-      orderWeight > 0) {
-      const weightCost = getWeightBasedCost(orderWeight, shippingMethod.weightPricingRules);
-      if (weightCost !== null) {
-        shippingCost = weightCost; // Replace base cost with weight-based cost
-      }
+    // -------------------------------------------------------
+    // NIVEL 3: PRECIO NACIONAL (baseCost) - por defecto
+    // -------------------------------------------------------
+    if (finalCost === null) {
+      finalCost = parseFloat(shippingMethod.baseCost);
+      appliedRule = 'national';
+      ruleDetails = {
+        reason: 'No specific postal code or province rule found',
+        baseCost: finalCost
+      };
     }
 
-    // Check max order value restriction
-    if (shippingMethod.maxOrderValue &&
-      orderSubtotal > parseFloat(shippingMethod.maxOrderValue)) {
-      throw new Error(`Order value exceeds maximum allowed for this shipping method`);
-    }
+    // =====================================================
+    // PASO FINAL: Aplicar cargo por bulto si corresponde
+    // =====================================================
+    const bulkyExtra = (isBulky && rules.bulkyExtra) ? parseFloat(rules.bulkyExtra) : 0;
+    const totalCost = finalCost + bulkyExtra;
 
     return {
-      cost: parseFloat(shippingCost.toFixed(2)),
-      originalCost: parseFloat(shippingMethod.baseCost),
+      cost: parseFloat(totalCost.toFixed(2)),
+      breakdown: {
+        shippingCost: parseFloat(finalCost.toFixed(2)),
+        bulkyExtra: parseFloat(bulkyExtra.toFixed(2))
+      },
+      appliedRule,        // 'postalCode' | 'province' | 'national'
+      ruleDetails,        // Detalles de qué regla se aplicó
       freeShipping: false,
       estimatedDays: {
         min: shippingMethod.estimatedDaysMin,
@@ -128,7 +190,9 @@ const calculateShippingCost = async (
         id: shippingMethod.id,
         code: shippingMethod.code,
         name: shippingMethod.name,
-        carrierName: shippingMethod.carrierName
+        carrierName: shippingMethod.carrierName,
+        description: shippingMethod.description,
+        icon: shippingMethod.icon
       }
     };
 
@@ -138,59 +202,13 @@ const calculateShippingCost = async (
 };
 
 /**
- * Check if postal code is in unavailable list
- */
-const isPostalCodeUnavailable = (postalCode, unavailableList) => {
-  for (const item of unavailableList) {
-    if (typeof item === 'string') {
-      if (item === postalCode) return true;
-    } else if (item.rangeStart && item.rangeEnd) {
-      if (postalCode >= item.rangeStart && postalCode <= item.rangeEnd) {
-        return true;
-      }
-    }
-  }
-  return false;
-};
-
-/**
- * Get additional cost for postal code from rules
- */
-const getPostalCodeCost = (postalCode, rules) => {
-  for (const rule of rules) {
-    if (rule.rangeStart && rule.rangeEnd) {
-      if (postalCode >= rule.rangeStart && postalCode <= rule.rangeEnd) {
-        if (rule.available === false) {
-          throw new Error('Shipping not available for this postal code');
-        }
-        return rule.additionalCost || 0;
-      }
-    }
-  }
-  return null;
-};
-
-/**
- * Get weight-based cost from rules
- */
-const getWeightBasedCost = (weight, rules) => {
-  // Sort rules by maxWeight
-  const sortedRules = [...rules].sort((a, b) => a.maxWeight - b.maxWeight);
-
-  for (const rule of sortedRules) {
-    if (weight <= rule.maxWeight) {
-      return rule.cost;
-    }
-  }
-
-  // If weight exceeds all brackets, use the highest bracket
-  return sortedRules[sortedRules.length - 1].cost;
-};
-
-/**
  * Get all available shipping methods for a given location and order
  */
-const getAvailableShippingMethods = async (shippingAddress, orderSubtotal, orderWeight = 0) => {
+const getAvailableShippingMethods = async (
+  shippingAddress,
+  orderSubtotal,
+  isBulky = false
+) => {
   try {
     const methods = await ShippingMethod.findAll({
       where: { enabled: true },
@@ -205,21 +223,12 @@ const getAvailableShippingMethods = async (shippingAddress, orderSubtotal, order
           method.id,
           shippingAddress,
           orderSubtotal,
-          orderWeight
+          isBulky
         );
 
-        availableMethods.push({
-          id: method.id,
-          code: method.code,
-          name: method.name,
-          description: method.description,
-          icon: method.icon,
-          ...costData,
-          requiresAddress: method.requiresAddress,
-          allowCashOnDelivery: method.allowCashOnDelivery,
-        });
+        availableMethods.push(costData);
       } catch (error) {
-        // Method not available for this location/order, skip it
+        // Método no disponible para esta ubicación/orden
         console.log(`Shipping method ${method.code} not available: ${error.message}`);
         continue;
       }
@@ -234,13 +243,18 @@ const getAvailableShippingMethods = async (shippingAddress, orderSubtotal, order
 /**
  * Validate if a shipping method can be used for an order
  */
-const validateShippingMethod = async (shippingMethodId, shippingAddress, orderSubtotal, orderWeight = 0) => {
+const validateShippingMethod = async (
+  shippingMethodId,
+  shippingAddress,
+  orderSubtotal,
+  isBulky = false
+) => {
   try {
     const costData = await calculateShippingCost(
       shippingMethodId,
       shippingAddress,
       orderSubtotal,
-      orderWeight
+      isBulky
     );
 
     return {
@@ -255,49 +269,9 @@ const validateShippingMethod = async (shippingMethodId, shippingAddress, orderSu
   }
 };
 
-/**
- * Create or update a shipping method
- */
-const createShippingMethod = async (data) => {
-  try {
-    const shippingMethod = await ShippingMethod.create(data);
-    return shippingMethod;
-  } catch (error) {
-    throw new Error(`Error creating shipping method: ${error.message}`);
-  }
-};
-
-/**
- * Update shipping method
- */
-const updateShippingMethod = async (id, data) => {
-  try {
-    const shippingMethod = await ShippingMethod.findByPk(id);
-    if (!shippingMethod) {
-      throw new Error('Shipping method not found');
-    }
-    await shippingMethod.update(data);
-    return shippingMethod;
-  } catch (error) {
-    throw new Error(`Error updating shipping method: ${error.message}`);
-  }
-};
-
-/**
- * Toggle shipping method enabled status
- */
-const toggleShippingMethodStatus = async (id) => {
-  try {
-    const shippingMethod = await ShippingMethod.findByPk(id);
-    if (!shippingMethod) {
-      throw new Error('Shipping method not found');
-    }
-    await shippingMethod.update({ enabled: !shippingMethod.enabled });
-    return shippingMethod;
-  } catch (error) {
-    throw new Error(`Error toggling shipping method status: ${error.message}`);
-  }
-};
+// =====================
+// Admin Methods
+// =====================
 
 /**
  * Get all shipping methods (admin)
@@ -317,19 +291,114 @@ const getAllShippingMethods = async () => {
  */
 const getShippingMethodById = async (id) => {
   try {
-    return await ShippingMethod.findByPk(id);
+    const method = await ShippingMethod.findByPk(id);
+
+    if (!method) {
+      throw new Error('Shipping method not found');
+    }
+
+    return method;
   } catch (error) {
-    throw new Error(`Error getting shipping method by id: ${error.message}`);
+    throw new Error(`Error getting shipping method: ${error.message}`);
   }
 };
 
+/**
+ * Create shipping method with auto-populated provinces
+ */
+const createShippingMethod = async (data) => {
+  try {
+    // Aplicamos el filtro estricto antes de crear
+    data.rules = applyStrictProvinceRules(data.rules || {});
+
+    validateRulesStructure(data.rules);
+
+    const shippingMethod = await ShippingMethod.create(data);
+    return shippingMethod;
+  } catch (error) {
+    throw new Error(`Error creating shipping method: ${error.message}`);
+  }
+};
+
+/**
+ * Update shipping method 
+ */
+const updateShippingMethod = async (id, data) => {
+  try {
+    const shippingMethod = await ShippingMethod.findByPk(id);
+    if (!shippingMethod) throw new Error('Shipping method not found');
+
+    // Si el update incluye 'rules', aplicamos la limpieza estricta
+    if (data.rules) {
+      data.rules = applyStrictProvinceRules(data.rules);
+      validateRulesStructure(data.rules);
+    }
+
+    await shippingMethod.update(data);
+    return shippingMethod;
+  } catch (error) {
+    throw new Error(`Error updating shipping method: ${error.message}`);
+  }
+};
+
+/**
+ * Toggle shipping method enabled status
+ */
+const toggleShippingMethodStatus = async (id) => {
+  try {
+    const shippingMethod = await ShippingMethod.findByPk(id);
+
+    if (!shippingMethod) {
+      throw new Error('Shipping method not found');
+    }
+
+    await shippingMethod.update({ enabled: !shippingMethod.enabled });
+    return shippingMethod;
+  } catch (error) {
+    throw new Error(`Error toggling shipping method status: ${error.message}`);
+  }
+};
+
+/**
+ * Delete shipping method
+ */
 const deleteShippingMethodById = async (id) => {
   try {
-    await ShippingMethod.destroy({
-      where: { id }
-    });
+    const shippingMethod = await ShippingMethod.findByPk(id);
+
+    if (!shippingMethod) {
+      throw new Error('Shipping method not found');
+    }
+
+    await shippingMethod.destroy();
+    return shippingMethod;
   } catch (error) {
-    throw new Error(`Error getting shipping method by id and deleting it: ${error.message}`);
+    throw new Error(`Error deleting shipping method: ${error.message}`);
+  }
+};
+
+/**
+ * Validate rules structure
+ */
+const validateRulesStructure = (rules) => {
+  if (typeof rules !== 'object') {
+    throw new Error('Rules must be an object');
+  }
+
+  if (rules.postalCodes && typeof rules.postalCodes !== 'object') {
+    throw new Error('postalCodes must be an object');
+  }
+
+  if (rules.provinces && typeof rules.provinces !== 'object') {
+    throw new Error('provinces must be an object');
+  }
+
+  if (rules.bulkyExtra && isNaN(parseFloat(rules.bulkyExtra))) {
+    throw new Error('bulkyExtra must be a number');
+  }
+
+  if (rules.freeShippingThreshold && isNaN(parseFloat(rules.freeShippingThreshold))) {
+    throw new Error('freeShippingThreshold must be a number');
   }
 };
 

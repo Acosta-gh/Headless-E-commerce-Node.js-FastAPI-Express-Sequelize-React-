@@ -8,157 +8,122 @@ const ShippingMethod = sequelize.define(
       type: DataTypes.STRING(50),
       allowNull: false,
       unique: true,
-      comment: 'Unique code: "standard", "express", "pickup"',
+      comment: "Unique identifier for the shipping method (e.g., 'standard', 'express')"
     },
     name: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      comment: 'Display name (e.g., "Standard Shipping", "Express Delivery", "Store Pickup")',
+      comment: "Display name for the shipping method"
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: "Detailed description of the shipping method"
     },
     enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+      comment: "Whether this shipping method is currently active"
     },
     
     // =====================
-    // Base Pricing
+    // CASCADING PRICING SYSTEM
     // =====================
+    
+    /**
+     * NIVEL 3 (Más general): Precio Nacional Base
+     * Este es el precio que se aplica cuando NO hay match 
+     * ni en código postal ni en provincia
+     */
     baseCost: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      defaultValue: 0,
-      comment: 'Base shipping cost',
+      defaultValue: 15000, // Precio nacional por defecto
+      comment: "Base national shipping cost (usado cuando no hay match en CP o provincia)"
     },
     
     // =====================
-    // Free Shipping Threshold
+    // Cascading rules system
     // =====================
-    freeShippingThreshold: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-      comment: 'Minimum order amount for free shipping (null = no free shipping)',
-    },
-    
-    // =====================
-    // Estimated Delivery Time
-    // =====================
-    estimatedDaysMin: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      comment: 'Minimum estimated delivery days',
-    },
-    estimatedDaysMax: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      comment: 'Maximum estimated delivery days',
-    },
-    
-    // =====================
-    // Regional Pricing
-    // =====================
-    regionalPricing: {
+    rules: {
       type: DataTypes.JSON,
       allowNull: true,
-      comment: 'Additional cost by region/province. Format: { "Buenos Aires": 0, "Cordoba": 300, "Patagonia": 800 }',
+      comment: `Sistema de cascada de precios (orden de prioridad):
+      {
+        // NIVEL 1 (Más específico): Códigos Postales
+        "postalCodes": {
+          "B8000": { "cost": 0 },      // Bahía Blanca - Gratis
+          "B8001": { "cost": 0 },      // Bahía Blanca - Gratis
+          "B8002": { "cost": 0 },      // Bahía Blanca - Gratis
+          "B8003": { "cost": 0 },      // Bahía Blanca - Gratis
+          "7500": { "cost": 5000 },    // Tres Arroyos - 5000
+          "9400": { "available": false } // No disponible
+        },
+        
+        // NIVEL 2 (Intermedio): Provincias
+        "provinces": {
+          "Buenos Aires": { "cost": 8000 },    // Provincia completa
+          "Córdoba": { "cost": 10000 },
+          "Tierra del Fuego": { "cost": 20000 },
+          "Santa Fe": { "available": false }   // Provincia no disponible
+        },
+        
+        // NIVEL 3: baseCost (15000) se usa automáticamente si no hay match
+        
+        // Extras opcionales
+        "bulkyExtra": 800,              // Cargo por bulto
+        "freeShippingThreshold": 50000  // Envío gratis si supera monto
+      }
+      
+      CASCADA DE BÚSQUEDA:
+      1. ¿Existe el código postal? → Usar ese precio
+      2. ¿No existe CP pero existe provincia? → Usar precio provincial
+      3. ¿No existe ni CP ni provincia? → Usar baseCost (precio nacional)
+      `
     },
     
     // =====================
-    // Postal Code Pricing Rules
+    // Display & metadata
     // =====================
-    postalCodeRules: {
-      type: DataTypes.JSON,
-      allowNull: true,
-      comment: 'Specific pricing or availability by postal code range. Format: [{ rangeStart: "1000", rangeEnd: "1999", additionalCost: 0, available: true }]',
-    },
-    
-    // =====================
-    // Weight-Based Pricing
-    // =====================
-    useWeightPricing: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-      comment: 'Enable weight-based pricing',
-    },
-    weightPricingRules: {
-      type: DataTypes.JSON,
-      allowNull: true,
-      comment: 'Weight brackets with costs. Format: [{ maxWeight: 5, cost: 500 }, { maxWeight: 10, cost: 800 }]',
-    },
-    
-    // =====================
-    // Availability
-    // =====================
-    availableCountries: {
-      type: DataTypes.JSON,
-      allowNull: true,
-      comment: 'List of country codes where this method is available (null = all countries)',
-    },
-    unavailablePostalCodes: {
-      type: DataTypes.JSON,
-      allowNull: true,
-      comment: 'List of postal codes or ranges where shipping is not available',
-    },
-    
-    // =====================
-    // Additional Information
-    // =====================
-    description: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: 'Description shown to customers',
-    },
-    icon: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      comment: 'Icon URL or identifier',
-    },
     displayOrder: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
-      comment: 'Display order in checkout',
+      comment: "Order in which to display this method in the UI"
     },
-    
-    // =====================
-    // Carrier Information
-    // =====================
+    icon: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: "Icon or image URL for the shipping method"
+    },
+    estimatedDaysMin: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: "Minimum estimated delivery days"
+    },
+    estimatedDaysMax: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: "Maximum estimated delivery days"
+    },
     carrierName: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: true,
-      comment: 'Shipping carrier name (e.g., "Correo Argentino", "OCA", "Andreani")',
-    },
-    trackingUrlTemplate: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      comment: 'URL template for tracking. Use {trackingNumber} as placeholder',
-    },
-    
-    // =====================
-    // Business Rules
-    // =====================
-    requiresAddress: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
-      comment: 'Whether this method requires a shipping address (false for pickup)',
-    },
-    allowCashOnDelivery: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-      comment: 'Allow cash payment on delivery',
-    },
-    maxOrderValue: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-      comment: 'Maximum order value for this shipping method (security limit)',
-    },
+      comment: "Name of the shipping carrier (e.g., 'Andreani', 'OCA')"
+    }
   },
   {
     timestamps: true,
     tableName: "shipping_methods",
+    indexes: [
+      {
+        fields: ['enabled']
+      },
+      {
+        fields: ['displayOrder']
+      }
+    ]
   }
 );
 
