@@ -26,6 +26,9 @@ import {
   User,
   Star,
   Eye,
+  DollarSign,
+  Package,
+  Hash,
 } from "lucide-react";
 
 function ArticlesList({
@@ -34,6 +37,26 @@ function ArticlesList({
   setEditingArticle,
   handleDeleteArticle,
 }) {
+  // Format price helper
+  const formatPrice = (price) => {
+    if (!price || price === 0) return "Free";
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(price);
+  };
+
+  // Stock status helper
+  const getStockBadge = (stock) => {
+    if (!stock || stock === 0) {
+      return <Badge variant="destructive" className="text-xs">Out of Stock</Badge>;
+    }
+    if (stock < 10) {
+      return <Badge variant="outline" className="text-xs text-orange-600 border-orange-600">Low Stock ({stock})</Badge>;
+    }
+    return <Badge variant="outline" className="text-xs text-green-600 border-green-600">In Stock ({stock})</Badge>;
+  };
+
   if (!articles || articles.length === 0) {
     return (
       <Card className="border-dashed">
@@ -122,16 +145,47 @@ function ArticlesList({
 
               {/* Content */}
               <CardContent className="pb-3 flex-1 space-y-3">
+                {/* ⭐ PRODUCT INFO - NUEVO */}
+                <div className="grid grid-cols-2 gap-2 p-3 bg-muted/50 rounded-lg border border-border">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <DollarSign className="h-3 w-3" />
+                      Price
+                    </div>
+                    <div className="text-sm font-bold text-primary">
+                      {formatPrice(article.price)}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Package className="h-3 w-3" />
+                      Stock
+                    </div>
+                    <div className="text-sm">
+                      {getStockBadge(article.stock)}
+                    </div>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Hash className="h-3 w-3" />
+                      SKU
+                    </div>
+                    <div className="text-xs font-mono font-semibold">
+                      {article.sku || "N/A"}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Preview */}
-                <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
-                  {article.content?.substring(0, 120) || "No content available"}
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                  {article.content?.substring(0, 80) || "No content available"}
                 </p>
 
                 {/* Categories */}
                 <div className="space-y-2">
                   {article.categories && article.categories.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {article.categories.slice(0, 3).map((cat) => (
+                      {article.categories.slice(0, 2).map((cat) => (
                         <Badge
                           key={cat.id}
                           variant="secondary"
@@ -140,9 +194,9 @@ function ArticlesList({
                           {cat.name}
                         </Badge>
                       ))}
-                      {article.categories.length > 3 && (
+                      {article.categories.length > 2 && (
                         <Badge variant="outline" className="text-xs">
-                          +{article.categories.length - 3}
+                          +{article.categories.length - 2}
                         </Badge>
                       )}
                     </div>

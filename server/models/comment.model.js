@@ -2,7 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("@/database/sequelize"); 
 
 const Comment = sequelize.define(
-  "Comments",
+  "Comment",
   {
     articleId: { // To which article the comment belongs
       type: DataTypes.INTEGER,

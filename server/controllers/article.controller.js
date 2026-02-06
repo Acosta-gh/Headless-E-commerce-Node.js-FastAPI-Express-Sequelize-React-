@@ -3,17 +3,14 @@
  * ⚠️ This file's code was generated partially or completely by a Large Language Model (LLM).
  * ========================================================================================
  */
-
 const articleService = require("@/services/article.service");
 
 async function createArticle(req, res) {
   const authorId = req.user.id;
-
+  
   // Parse categoryIds from request body
   let categoryIds = [];
-  // If categoryIds is sent as a JSON string, parse it
   if (req.body.categoryIds) {
-    // Parse the JSON string into an array
     categoryIds =
       typeof req.body.categoryIds === "string"
         ? JSON.parse(req.body.categoryIds)
@@ -26,10 +23,11 @@ async function createArticle(req, res) {
       bannerPath = `/uploads/${req.file.filename}`;
     }
 
-    const { title, content, tempId, featured, stock, price, sku } = req.body;
-
-    // Convert featured to booalean in case it's sent as a string because of form data
+    const { title, content, tempId, featured, bulky, stock, price, sku } = req.body;
+    
+    // Convert to boolean
     const isFeatured = featured === "true" || featured === true;
+    const isBulky = bulky === "true" || bulky === true;
 
     const article = await articleService.createArticle({
       authorId,
@@ -39,10 +37,12 @@ async function createArticle(req, res) {
       tempId,
       sku,
       featured: isFeatured,
+      isBulky: isBulky,
       stock: Number(stock),
       price: Number(price),
       categoryIds,
     });
+
     return res.status(201).json(article);
   } catch (error) {
     console.error("Error creating article:", error);
@@ -51,6 +51,7 @@ async function createArticle(req, res) {
       .json({ error: "Error creating article: " + error.message });
   }
 }
+
 async function getAllArticles(req, res) {
   const articles = await articleService.getAllArticles();
   return res.status(200).json(articles);
@@ -71,15 +72,14 @@ async function getArticleById(req, res) {
 async function updateArticle(req, res) {
   console.log("Updating article with req.body:", req.body);
   console.log("Updating article with req.file:", req.file);
+
   try {
     const authorId = req.user.id;
+    const { title, content, categoryIds, featured, bulky, stock, price, sku } = req.body;
 
-    const { title, content, categoryIds, featured, stock, price } = req.body;
-
-    // Convert featured to boolean
     const isFeatured = featured === "true" || featured === true;
+    const isBulky = bulky === "true" || bulky === true; 
 
-    // Parse categoryIds
     const parsedCategoryIds =
       typeof categoryIds === "string" ? JSON.parse(categoryIds) : categoryIds;
 
@@ -96,8 +96,10 @@ async function updateArticle(req, res) {
       content,
       banner: bannerPath,
       featured: isFeatured,
+      isBulky: isBulky, 
       stock: Number(stock),
       price: Number(price),
+      sku,
       categoryIds: parsedCategoryIds,
     });
 

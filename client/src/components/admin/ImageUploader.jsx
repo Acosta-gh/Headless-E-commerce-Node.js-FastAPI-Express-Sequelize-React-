@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Upload, Image as ImageIcon, X } from "lucide-react";
+import { Loader2, Upload, ImageIcon, Check } from "lucide-react";
 
 function ImageUploader({
   imageInputRef,
@@ -11,52 +11,68 @@ function ImageUploader({
   isUploadingImage,
 }) {
   return (
-    <div className="space-y-2 flex align-items-center gap-4">
-      <div className="flex gap-2 items-center ">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="gap-2 px-3"
-        >
-          <Input
-            ref={imageInputRef}
-            id="image"
-            type="file"
-            name="image"
-            accept="image/*"
-            onChange={onImageChange}
-            className="hidden"
-          />
-          <label
-            htmlFor="image"
-            type="button"
-            className="flex flex-row gap-2 align-items-center items-center"
-          >
-            <ImageIcon className="h-4 w-4" />
-            <span className="text-sm text-muted-foreground ">
-              {imageData ? "Change" : "Upload Image"}
-            </span>
-          </label>
-        </Button>
-        <Button
-          type="button"
-          disabled={isUploadingImage || !imageData}
-          onClick={onUpload}
-          variant="outline"
-          size="sm"
-          className="gap-2"
-        >
-          {isUploadingImage ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">
-            {isUploadingImage ? "Uploading..." : "Confirm Upload"}
+    <div className="flex items-center gap-2">
+      {/* Hidden file input */}
+      <Input
+        ref={imageInputRef}
+        id="image-upload"
+        type="file"
+        name="image"
+        accept="image/*"
+        onChange={onImageChange}
+        className="hidden"
+      />
+      
+      {/* Select Image Button */}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        asChild
+        className="h-9 px-3"
+      >
+        <label htmlFor="image-upload" className="cursor-pointer flex items-center gap-2">
+          <ImageIcon className="h-4 w-4" />
+          <span className="text-xs">
+            {imageData ? "Change" : "Select"}
           </span>
-        </Button>
-      </div>
+        </label>
+      </Button>
+
+      {/* Upload Button */}
+      <Button
+        type="button"
+        disabled={isUploadingImage || !imageData}
+        onClick={onUpload}
+        size="sm"
+        variant={imageData ? "default" : "outline"}
+        className="h-9 px-3"
+      >
+        {isUploadingImage ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <span className="text-xs">Uploading...</span>
+          </>
+        ) : imageData ? (
+          <>
+            <Upload className="h-4 w-4 mr-2" />
+            <span className="text-xs">Upload</span>
+          </>
+        ) : (
+          <>
+            <Upload className="h-4 w-4 mr-2" />
+            <span className="text-xs">Upload</span>
+          </>
+        )}
+      </Button>
+
+      {/* Image selected indicator */}
+      {imageData && !isUploadingImage && (
+        <div className="flex items-center gap-1 text-xs text-green-600">
+          <Check className="h-3 w-3" />
+          <span className="hidden sm:inline">Ready</span>
+        </div>
+      )}
     </div>
   );
 }

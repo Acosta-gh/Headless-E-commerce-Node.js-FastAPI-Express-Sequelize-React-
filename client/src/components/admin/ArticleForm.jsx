@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -20,11 +19,14 @@ import {
   Code,
   Link,
   List,
-  Image as ImageIcon,
   Eye,
+  DollarSign,
+  Package,
+  Hash,
+  Star,
+  X,
 } from "lucide-react";
 
-import PaginationControls from "@/components/common/PaginationControls";
 import ImageUploader from "@/components/admin/ImageUploader";
 import { BACKEND_URL } from "@/components/Constants";
 
@@ -46,32 +48,10 @@ function ArticleForm({
   cancelEditArticle,
   handleSubmitEdit,
 }) {
-  // -------------------
-  //      📦 State
-  // -------------------
   const [bannerPreview, setBannerPreview] = useState(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
-  // -------------------
-  // Pagination for Categories
-  // -------------------
-  const [basePaginationCategories, setBasePaginationCategories] = useState(0);
-  const [categoriesPerPage, setCategoriesPerPage] = useState(12);
-  const [categoriesCurrentPage, setCategoriesCurrentPage] = useState(1);
-  const categoriesTotalPages = Math.ceil(categories.length / categoriesPerPage);
-
-  const paginatedCategories = categories.slice(
-    basePaginationCategories,
-    basePaginationCategories + categoriesPerPage
-  );
-
-  // -------------------
-  //    🖐️ Handlers
-  // -------------------
-  const handleCategoryPageChange = (newPage) => {
-    setCategoriesCurrentPage(newPage);
-    const newBase = (newPage - 1) * categoriesPerPage;
-    setBasePaginationCategories(newBase);
-  };
+  const visibleCategories = showAllCategories ? categories : categories.slice(0, 8);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -102,9 +82,6 @@ function ArticleForm({
     onChange(e);
   };
 
-  //  -------------------
-  //   Markdown Insertion
-  //  -------------------
   const insertMarkdown = (before, after = "") => {
     const textarea = document.getElementById("content");
     const start = textarea.selectionStart;
@@ -130,37 +107,15 @@ function ArticleForm({
       textarea.selectionEnd = start + before.length + selectedText.length;
     }, 0);
   };
+
   const markdownButtons = [
-    {
-      icon: Bold,
-      label: "Bold",
-      onClick: () => insertMarkdown("**", "**"),
-    },
-    {
-      icon: Italic,
-      label: "Cursive",
-      onClick: () => insertMarkdown("*", "*"),
-    },
-    {
-      icon: Code,
-      label: "Code",
-      onClick: () => insertMarkdown("`", "`"),
-    },
-    {
-      icon: Link,
-      label: "Link",
-      onClick: () => insertMarkdown("[texto](", ")"),
-    },
-    {
-      icon: List,
-      label: "List",
-      onClick: () => insertMarkdown("\n- ", ""),
-    },
+    { icon: Bold, label: "Bold", onClick: () => insertMarkdown("**", "**") },
+    { icon: Italic, label: "Italic", onClick: () => insertMarkdown("*", "*") },
+    { icon: Code, label: "Code", onClick: () => insertMarkdown("`", "`") },
+    { icon: Link, label: "Link", onClick: () => insertMarkdown("[text](", ")") },
+    { icon: List, label: "List", onClick: () => insertMarkdown("\n- ", "") },
   ];
 
-  // -------------------
-  //     📄 Effects
-  // -------------------
   useEffect(() => {
     if (isEditing && formData.banner) {
       setBannerPreview(
@@ -171,117 +126,151 @@ function ArticleForm({
     }
   }, [isEditing, formData.banner]);
 
-  useEffect(() => {
-    if (categoriesCurrentPage > categoriesTotalPages) {
-      setCategoriesCurrentPage((prev) => (prev > 1 ? prev - 1 : 1));
-      setBasePaginationCategories((prev) =>
-        prev > categoriesPerPage ? prev - categoriesPerPage : 0
-      );
-    }
-  }, [categoriesTotalPages]);
-
   return (
-    <div className="w-full mx-auto">
-      <form
-        onSubmit={isEditing ? handleFormSubmitEdit : handleFormSubmit}
-        className="space-y-6"
-      >
-        {/* Header Card */}
-        <Card className="border-l-4 border-l-primary">
-          <CardHeader>
-            <CardTitle className="text-2xl">
-              {isEditing ? "Edit article" : "Create new article"}
-            </CardTitle>
-            <CardDescription>
-              {isEditing
-                ? "Update the content and settings of your article"
-                : "Fill in the details to publish a new article"}
-            </CardDescription>
+    <div className="w-full">
+      <form onSubmit={isEditing ? handleFormSubmitEdit : handleFormSubmit}>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">
+                {isEditing ? "Edit Article" : "Create Article"}
+              </CardTitle>
+              {isEditing && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelEdit}
+                  className="h-8"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+              )}
+            </div>
           </CardHeader>
 
-          {/* Title Section */}
-
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title" className="text-sm font-medium">
-                Title
+            {/* Title */}
+            <div className="space-y-1.5">
+              <Label htmlFor="title" className="text-xs font-medium">
+                Title *
               </Label>
               <Input
                 id="title"
-                type="text"
                 name="title"
-                placeholder="E.g., The Future of Technology in Everyday Life"
+                placeholder="Article title..."
                 value={formData.title}
                 onChange={onChange}
                 required
-                className="text-base"
+                className="h-9"
               />
             </div>
-          </CardContent>
 
-          {/* Banner Section */}
-
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="banner" className="text-sm font-medium">
-                Banner Image
-              </Label>
-              <div className="relative">
+            {/* Product Info Grid */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="sku" className="text-xs font-medium flex items-center gap-1">
+                  <Hash className="h-3 w-3" />
+                  SKU *
+                </Label>
                 <Input
-                  ref={bannerInputRef}
-                  id="banner"
-                  type="file"
-                  name="banner"
-                  accept="image/*"
-                  onChange={handleBannerChange}
-                  className="cursor-pointer"
+                  id="sku"
+                  name="sku"
+                  placeholder="PROD-001"
+                  value={formData.sku}
+                  onChange={onChange}
+                  required
+                  className="h-9 text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="price" className="text-xs font-medium flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" />
+                  Price
+                </Label>
+                <Input
+                  id="price"
+                  type="number"
+                  name="price"
+                  placeholder="0.00"
+                  value={formData.price}
+                  onChange={onChange}
+                  min="0"
+                  step="0.01"
+                  className="h-9 text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="stock" className="text-xs font-medium flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  Stock
+                </Label>
+                <Input
+                  id="stock"
+                  type="number"
+                  name="stock"
+                  placeholder="0"
+                  value={formData.stock}
+                  onChange={onChange}
+                  min="0"
+                  step="1"
+                  className="h-9 text-sm"
                 />
               </div>
             </div>
 
-            {bannerPreview && (
-              <div className="relative w-full h-64 rounded-lg border-2 border-primary/20 overflow-hidden bg-muted">
-                <img
-                  src={bannerPreview}
-                  alt="Banner preview"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-2 right-2">
-                  <Badge
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    <Eye className="h-3 w-3" />
+            <Separator />
+
+            {/* Banner */}
+            <div className="space-y-2">
+              <Label htmlFor="banner" className="text-xs font-medium">
+                Banner Image
+              </Label>
+              <Input
+                ref={bannerInputRef}
+                id="banner"
+                type="file"
+                name="banner"
+                accept="image/*"
+                onChange={handleBannerChange}
+                className="h-9 cursor-pointer"
+              />
+              {bannerPreview && (
+                <div className="relative w-full h-40 rounded border overflow-hidden">
+                  <img
+                    src={bannerPreview}
+                    alt="Banner preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
+                    <Eye className="h-3 w-3 mr-1" />
                     Preview
                   </Badge>
                 </div>
-              </div>
-            )}
-          </CardContent>
+              )}
+            </div>
 
-          {/* Content Section */}
-
-          <CardContent className="space-y-3">
             {/* Markdown Toolbar */}
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground">
-                Markdown Tools
-              </Label>
-              <div className="flex flex-wrap gap-1 p-3 bg-muted border border-input rounded-lg">
+              <Label className="text-xs font-medium">Markdown Tools</Label>
+              <div className="flex flex-wrap gap-1 p-2 bg-muted rounded">
                 {markdownButtons.map((btn) => (
                   <Button
                     key={btn.label}
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={btn.onClick}
                     title={btn.label}
-                    className="h-9 w-9 p-0 hover:bg-primary hover:text-primary-foreground transition-colors"
+                    className="h-8 w-8 p-0"
                   >
-                    <btn.icon className="h-4 w-4" />
+                    <btn.icon className="h-3.5 w-3.5" />
                   </Button>
                 ))}
-                <Separator orientation="vertical" className="mx-1" />
+                <Separator orientation="vertical" className="mx-1 h-8" />
                 <ImageUploader
                   imageInputRef={imageInputRef}
                   onImageChange={handleImageChange}
@@ -292,78 +281,76 @@ function ArticleForm({
               </div>
             </div>
 
-            {/* Textarea */}
-            <div className="space-y-2">
-              <Label htmlFor="content" className="text-sm font-medium">
-                Article Content
+            {/* Content */}
+            <div className="space-y-1.5">
+              <Label htmlFor="content" className="text-xs font-medium">
+                Content *
               </Label>
               <Textarea
                 id="content"
                 name="content"
-                placeholder="Write your article here... You can use Markdown to format."
+                placeholder="Write your article here..."
                 value={formData.content}
                 onChange={onChange}
                 required
-                className="min-h-64 font-mono text-sm resize-vertical"
+                className="min-h-48 font-mono text-xs resize-y"
               />
-              <p className="text-xs text-muted-foreground">
-                You can use Markdown syntax to format your content.
-              </p>
-            </div>
-          </CardContent>
-
-          {/* Categories Section */}
-
-          <CardContent>
-            <div className="space-y-2 mb-3">
-              <Label className="text-sm font-medium">Tags/Categories</Label>
             </div>
 
-            {categories.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No categories available. Please create categories first.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                {paginatedCategories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className="flex items-center space-x-2 p-2 rounded-lg border border-input hover:bg-accent transition-colors"
-                  >
-                    <Checkbox
-                      id={`cat-${cat.id}`}
-                      checked={selectedCategories.includes(cat.id)}
-                      onCheckedChange={() =>
-                        handleCategoryCheckbox({
-                          target: {
-                            value: cat.id,
-                            checked: !selectedCategories.includes(cat.id),
-                          },
-                        })
-                      }
-                    />
-                    <Label
-                      htmlFor={`cat-${cat.id}`}
-                      className="cursor-pointer font-medium text-sm"
-                    >
-                      {cat.name}
-                    </Label>
+            {/* Categories */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Categories</Label>
+              {categories.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No categories available. Create one first.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {visibleCategories.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className="flex items-center space-x-1.5 px-2 py-1.5 rounded border hover:bg-accent transition-colors"
+                      >
+                        <Checkbox
+                          id={`cat-${cat.id}`}
+                          checked={selectedCategories.includes(cat.id)}
+                          onCheckedChange={() =>
+                            handleCategoryCheckbox({
+                              target: {
+                                value: cat.id,
+                                checked: !selectedCategories.includes(cat.id),
+                              },
+                            })
+                          }
+                          className="h-3.5 w-3.5"
+                        />
+                        <Label
+                          htmlFor={`cat-${cat.id}`}
+                          className="cursor-pointer text-xs font-medium"
+                        >
+                          {cat.name}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-            {categoriesTotalPages > 1 && (
-              <PaginationControls
-                currentPage={categoriesCurrentPage}
-                totalPages={categoriesTotalPages}
-                onPageChange={handleCategoryPageChange}
-              />
-            )}
-          </CardContent>
+                  {categories.length > 8 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAllCategories(!showAllCategories)}
+                      className="h-7 text-xs"
+                    >
+                      {showAllCategories ? "Show Less" : `Show All (${categories.length})`}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
 
-          {/* Featured Section */}
-          <CardContent>
-            <div className="flex items-center space-x-3 p-3 rounded-lg border border-input hover:bg-accent/50 transition-colors cursor-pointer">
+            {/* Featured */}
+            <div className="flex items-center space-x-2 p-2 rounded border hover:bg-accent/50 transition-colors">
               <Checkbox
                 id="featured"
                 checked={formData.featured}
@@ -371,51 +358,50 @@ function ArticleForm({
                   onChange({
                     target: {
                       name: "featured",
-                      value: checked,
+                      type: "checkbox",
+                      checked: checked,
                     },
                   })
                 }
+                className="h-4 w-4"
               />
-              <div className="flex-1">
-                <Label
-                  htmlFor="featured"
-                  className="cursor-pointer font-medium text-sm"
-                >
-                  Mark as Featured Article
-                </Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Featured articles are highlighted on the homepage and in
-                </p>
-              </div>
+              <Label htmlFor="featured" className="cursor-pointer text-sm flex items-center gap-1.5">
+                <Star className="h-3.5 w-3.5" />
+                Mark as Featured
+              </Label>
             </div>
-          </CardContent>
-          <CardContent>
+            <div className="flex items-center space-x-2 p-2 rounded border hover:bg-accent/50 transition-colors">
+              <Checkbox
+                id="isBulky"
+                checked={formData.isBulky}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    target: {
+                      name: "isBulky",
+                      type: "checkbox",
+                      checked,
+                    },
+                  })
+                }
+                className="h-4 w-4"
+              />
+              <Label htmlFor="isBulky" className="cursor-pointer text-sm flex items-center gap-1.5">
+                <Star className="h-3.5 w-3.5" />
+                Mark as Bulky
+              </Label>
+            </div>
+
             {/* Submit Button */}
-            <div className="flex gap-2 pt-4 ">
-              <Button
-                type="submit"
-                disabled={isSubmittingArticle}
-                size="lg"
-                className="flex-1 cursor-pointer"
-              >
-                {isSubmittingArticle && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {isEditing ? "Update Article" : "Create Article"}
-              </Button>
-              {isEditing && (
-                <Button
-                  type="submit"
-                  disabled={isSubmittingArticle}
-                  size="lg"
-                  variant="outline"
-                  className="flex-1 cursor-pointer"
-                  onClick={handleCancelEdit}
-                >
-                  Cancel
-                </Button>
+            <Button
+              type="submit"
+              disabled={isSubmittingArticle}
+              className="w-full h-9"
+            >
+              {isSubmittingArticle && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-            </div>
+              {isEditing ? "Update Article" : "Create Article"}
+            </Button>
           </CardContent>
         </Card>
       </form>

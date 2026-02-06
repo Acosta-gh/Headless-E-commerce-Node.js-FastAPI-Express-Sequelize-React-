@@ -39,16 +39,23 @@ const applyStrictProvinceRules = (inputRules = {}) => {
  * Normalize address to internal format
  */
 const normalizeAddress = (address) => {
-  if (address.shippingCity !== undefined) {
+  // Si ya tiene el formato interno completo, retornar tal cual
+  if (address.shippingState && address.shippingPostalCode && address.shippingCountry) {
     return address;
   }
 
-  return {
-    shippingCity: address.city,
-    shippingState: address.state || address.province,
-    shippingPostalCode: address.postalCode,
-    shippingCountry: address.country,
-  };
+  // Si tiene el formato externo, convertir
+  if (address.state || address.province || address.city || address.postalCode) {
+    return {
+      shippingCity: address.city,
+      shippingState: address.state || address.province,
+      shippingPostalCode: address.postalCode,
+      shippingCountry: address.country,
+    };
+  }
+
+
+  return address;
 };
 
 /**
@@ -67,6 +74,10 @@ const calculateShippingCost = async (
 ) => {
   try {
     const address = normalizeAddress(shippingAddress);
+    
+    console.log('🔍 === SHIPPING COST CALCULATION DEBUG ===');
+    console.log('📍 Original address:', shippingAddress);
+    console.log('📍 Normalized address:', address);
 
     const shippingMethod = await ShippingMethod.findByPk(shippingMethodId);
 
@@ -80,10 +91,13 @@ const calculateShippingCost = async (
 
     const rules = shippingMethod.rules || {};
     
+    console.log('📋 Rules:', JSON.stringify(rules, null, 2));
+    
     // =====================================================
     // PASO 0: Verificar envío gratis por monto
     // =====================================================
     if (rules.freeShippingThreshold && orderSubtotal >= rules.freeShippingThreshold) {
+      console.log('✅ Free shipping applied (threshold met)');
       return {
         cost: 0,
         originalCost: parseFloat(shippingMethod.baseCost),
@@ -113,58 +127,78 @@ const calculateShippingCost = async (
     // -------------------------------------------------------
     // NIVEL 1: Buscar por CÓDIGO POSTAL (más específico)
     // -------------------------------------------------------
+    console.log('🔍 NIVEL 1: Checking postal code...');
+    console.log('   Has postalCodes rules?', !!rules.postalCodes);
+    console.log('   Address postal code:', address.shippingPostalCode);
+    console.log('   Type:', typeof address.shippingPostalCode);
+    
     if (rules.postalCodes && address.shippingPostalCode) {
-      const postalCodeRule = rules.postalCodes[address.shippingPostalCode];
+      console.log('   Available postal codes:', Object.keys(rules.postalCodes));
+      const postalCode = String(address.shippingPostalCode);
+      const postalCodeRule = rules.postalCodes[postalCode];
+      
+      console.log('   Looking for:', postalCode);
+      console.log('   Found rule:', postalCodeRule);
 
       if (postalCodeRule) {
-        // Verificar disponibilidad
         if (postalCodeRule.available === false) {
-          throw new Error(`Shipping not available for postal code ${address.shippingPostalCode}`);
+          throw new Error(`Shipping not available for postal code ${postalCode}`);
         }
 
-        // ✅ ENCONTRADO: Usar costo de código postal
         finalCost = parseFloat(postalCodeRule.cost || 0);
         appliedRule = 'postalCode';
         ruleDetails = {
-          postalCode: address.shippingPostalCode,
+          postalCode: postalCode,
           cost: finalCost
         };
+        console.log('   ✅ POSTAL CODE MATCH! Cost:', finalCost);
+      } else {
+        console.log('   ❌ No postal code match');
       }
     }
 
     // -------------------------------------------------------
     // NIVEL 2: Buscar por PROVINCIA (si no hubo match en CP)
     // -------------------------------------------------------
+    console.log('🔍 NIVEL 2: Checking province...');
+    console.log('   finalCost is null?', finalCost === null);
+    console.log('   Has provinces rules?', !!rules.provinces);
+    console.log('   Address state:', address.shippingState);
+    
     if (finalCost === null && rules.provinces && address.shippingState) {
+      console.log('   Available provinces:', Object.keys(rules.provinces));
       const provinceRule = rules.provinces[address.shippingState];
+      console.log('   Found rule:', provinceRule);
 
       if (provinceRule !== undefined) {
-        // Verificar disponibilidad
         if (provinceRule.available === false) {
           throw new Error(`Shipping not available for province ${address.shippingState}`);
         }
 
-        // ✅ ENCONTRADO: Usar costo provincial
         finalCost = parseFloat(provinceRule.cost || 0);
         appliedRule = 'province';
         ruleDetails = {
           province: address.shippingState,
           cost: finalCost
         };
+        console.log('   ✅ PROVINCE MATCH! Cost:', finalCost);
+      } else {
+        console.log('   ❌ No province match');
       }
-      // Si provinceRule === undefined, continuar a nivel 3 (nacional)
     }
 
     // -------------------------------------------------------
     // NIVEL 3: PRECIO NACIONAL (baseCost) - por defecto
     // -------------------------------------------------------
     if (finalCost === null) {
+      console.log('🔍 NIVEL 3: Using national base cost');
       finalCost = parseFloat(shippingMethod.baseCost);
       appliedRule = 'national';
       ruleDetails = {
         reason: 'No specific postal code or province rule found',
         baseCost: finalCost
       };
+      console.log('   ✅ NATIONAL COST:', finalCost);
     }
 
     // =====================================================
@@ -173,14 +207,21 @@ const calculateShippingCost = async (
     const bulkyExtra = (isBulky && rules.bulkyExtra) ? parseFloat(rules.bulkyExtra) : 0;
     const totalCost = finalCost + bulkyExtra;
 
+    console.log('💰 FINAL CALCULATION:');
+    console.log('   Shipping cost:', finalCost);
+    console.log('   Bulky extra:', bulkyExtra);
+    console.log('   TOTAL:', totalCost);
+    console.log('   Applied rule:', appliedRule);
+    console.log('🔍 === END DEBUG ===\n');
+
     return {
       cost: parseFloat(totalCost.toFixed(2)),
       breakdown: {
         shippingCost: parseFloat(finalCost.toFixed(2)),
         bulkyExtra: parseFloat(bulkyExtra.toFixed(2))
       },
-      appliedRule,        // 'postalCode' | 'province' | 'national'
-      ruleDetails,        // Detalles de qué regla se aplicó
+      appliedRule,
+      ruleDetails,
       freeShipping: false,
       estimatedDays: {
         min: shippingMethod.estimatedDaysMin,
@@ -197,6 +238,7 @@ const calculateShippingCost = async (
     };
 
   } catch (error) {
+    console.error('❌ Error in calculateShippingCost:', error);
     throw new Error(`Error calculating shipping cost: ${error.message}`);
   }
 };

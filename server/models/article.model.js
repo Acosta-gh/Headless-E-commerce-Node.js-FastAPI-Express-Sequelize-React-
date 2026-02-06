@@ -55,6 +55,11 @@ const Article = sequelize.define(
       allowNull: false,
       defaultValue: 0,
     },
+    isBulky: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   },
   {
     timestamps: true,

@@ -3,7 +3,6 @@
 * ⚠️ This file's code was generated partially or completely by a Large Language Model (LLM).
 * ========================================================================================
 */
-
 import axios from "axios";
 
 let API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1/";
@@ -30,9 +29,11 @@ export const getArticleById = async (id) => {
   return response.data;
 };
 
-/** Create a new article
+/** 
+ * Create a new article
  * @param {Object} articleData - Article data
  * @param {string} tempIdToken - Temporary ID to associate the article with image uploads
+ * @param {string} token - Authentication token
  * @returns {Promise<Object>} Created article data
  * @throws {Error} Network or server error
  */
@@ -46,29 +47,34 @@ export const createArticle = async (articleData, tempIdToken, token) => {
   return response.data;
 };
 
-/** Update an existing article
+/** 
+ * Update an existing article
  * @param {string} id - Article ID
  * @param {Object} articleData - Updated article data
+ * @param {string} tempIdToken - Temporary ID token
+ * @param {string} token - Authentication token
  * @returns {Promise<Object>} Updated article data
  * @throws {Error} Network or server error
  */
 export const updateArticle = async (id, articleData, tempIdToken, token) => {
   const response = await axios.put(`${ARTICLES_URL}/${id}`, articleData, {
     headers: {
-       Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       "x-tempid-token": tempIdToken,
     },
   });
   return response.data;
 };
 
-/** Delete an article
+/** 
+ * Delete an article
  * @param {string} id - Article ID
+ * @param {string} token - Authentication token
  * @returns {Promise<Object>} Deletion result
  * @throws {Error} Network or server error
  */
-export const deleteArticle = async (id,token) => {
-  const response = await axios.delete(`${ARTICLES_URL}/${id}`,{
+export const deleteArticle = async (id, token) => {
+  const response = await axios.delete(`${ARTICLES_URL}/${id}`, {
     headers: {  
       Authorization: `Bearer ${token}`,
     },

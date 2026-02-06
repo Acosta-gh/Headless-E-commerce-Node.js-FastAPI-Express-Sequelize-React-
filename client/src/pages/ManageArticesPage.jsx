@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 // Components
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import PaginationControls from "@/components/common/PaginationControls";
 
@@ -28,6 +28,7 @@ import ArticlesList from "@/components/admin/ArticlesList";
 
 import { BACKEND_URL } from "@/components/Constants";
 import { Fade } from "react-awesome-reveal";
+import { FileText, FolderTree, LayoutDashboard } from "lucide-react";
 
 function AdminPanel() {
   // -------------------
@@ -72,13 +73,16 @@ function AdminPanel() {
   // -------------------
   //      📦 State
   // -------------------
-  // Form state
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     tempId: "",
     banner: null,
     featured: false,
+    isBulky: false,
+    price: "",
+    stock: "",
+    sku: "",
   });
   const [imageData, setImageData] = useState(null);
   const [categoryForm, setCategoryForm] = useState({
@@ -86,6 +90,7 @@ function AdminPanel() {
     description: "",
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [activeTab, setActiveTab] = useState("articles");
 
   // -------------------
   // Pagination for Articles
@@ -108,10 +113,9 @@ function AdminPanel() {
   // Pagination for Categories
   // -------------------
   const [basePaginationCategories, setBasePaginationCategories] = useState(0);
-  const [categoriesPerPage, setCategoriesPerPage] = useState(3);
+  const [categoriesPerPage, setCategoriesPerPage] = useState(6);
   const [categoriesCurrentPage, setCategoriesCurrentPage] = useState(1);
   const categoriesTotalPages = Math.ceil(categories.length / categoriesPerPage);
-  console.log("categoriesTotalPages:", categoriesTotalPages);
 
   const sortedCategories = categories.sort((a, b) =>
     a.name.localeCompare(b.name)
@@ -125,7 +129,6 @@ function AdminPanel() {
   // -------------------
   //      📚 Refs
   // -------------------
-  // refs for file inputs so we can reset them after upload
   const bannerInputRef = useRef(null);
   const imageInputRef = useRef(null);
 
@@ -133,18 +136,16 @@ function AdminPanel() {
   //     📄 Effects
   // -------------------
   useEffect(() => {
-    // Session expiration handling
     const interval = setInterval(() => {
       if (isAuthenticated && token) {
         toast.info("Your session has expired. Please log in again.");
         window.location.reload();
       }
-    }, 10 * 60 * 1000); // 10 minutes
+    }, 10 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Set tempId in formData when it changes
   useEffect(() => {
     if (tempId) {
       setFormData((prevData) => ({ ...prevData, tempId }));
@@ -153,7 +154,6 @@ function AdminPanel() {
     }
   }, [tempId]);
 
-  // Reset pagination if total pages decrease
   useEffect(() => {
     if (categoriesCurrentPage > categoriesTotalPages) {
       setCategoriesCurrentPage((prev) => (prev > 1 ? prev - 1 : 1));
@@ -182,20 +182,18 @@ function AdminPanel() {
     setBasePaginationCategories((newPage - 1) * categoriesPerPage);
   };
 
-  /*
-   * Handle form input changes
-   * @param {Event} e - The input change event
-   */
   const handleChange = (e) => {
-    const { name, value, files } = e.target;
+    const { name, value, files, type, checked } = e.target;
+
     if (name === "banner") {
       setFormData((prevData) => ({ ...prevData, banner: files?.[0] ?? null }));
+    } else if (type === "checkbox") {
+      setFormData((prevData) => ({ ...prevData, [name]: checked }));
     } else {
       setFormData((prevData) => ({ ...prevData, [name]: value }));
     }
   };
 
-  // Cancel editing article
   const cancelEditArticle = () => {
     setIsEditing(false);
     setEditingArticleId(null);
@@ -205,6 +203,10 @@ function AdminPanel() {
       tempId: tempId || "",
       banner: null,
       featured: false,
+      isBulky: false,
+      price: "",
+      stock: "",
+      sku: "",
     });
     setSelectedCategories([]);
     if (bannerInputRef.current) {
@@ -213,10 +215,6 @@ function AdminPanel() {
     toast.info("Article editing cancelled");
   };
 
-  /*
-   * Handle image file selection
-   * @param {Event} e - The file input change event
-   */
   const handleImageChange = (e) => {
     const { files } = e.target;
     if (files && files[0]) {
@@ -224,10 +222,6 @@ function AdminPanel() {
     }
   };
 
-  /* 
-  * Handle editing a category
-  + @param {Object} category - The category to edit
-  */
   const handleEditCategory = (category) => {
     if (!category) {
       toast.info("Category editing cancelled");
@@ -246,34 +240,22 @@ function AdminPanel() {
     });
   };
 
-  /*
-   * Handle category form input changes
-   * @param {Event} e - The input change event
-   */
   const handleCategoryFormChange = (e) => {
     const { name, value } = e.target;
     setCategoryForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  /*
-   * Handle category submission
-   * @param {Event} e - The form submission event
-   */
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
     try {
       const newCat = await addCategory(categoryForm);
       setCategoryForm({ name: "", description: "" });
-      toast.success("Categoría creada");
+      toast.success("Category created");
     } catch (err) {
-      toast.error("Error creando categoría");
+      toast.error("Error creating category");
     }
   };
 
-  /*
-   * Handle category edit submission
-   * @param {Event} e - The form submission event
-   */
   const handleEditCategorySubmit = async (e) => {
     e.preventDefault();
     try {
@@ -287,22 +269,17 @@ function AdminPanel() {
     }
   };
 
-  /*
-   * Handle deleting a category
-   * @param {number} id - The ID of the category to delete
-   */
   const handleDeleteCategory = async (id) => {
-    if (window.confirm("¿Eliminar esta categoría?")) {
+    if (window.confirm("Delete this category?")) {
       try {
         await removeCategory(id);
-        toast.success("Categoría eliminada");
+        toast.success("Category deleted");
       } catch (err) {
-        toast.error("Error eliminando categoría");
+        toast.error("Error deleting category");
       }
     }
   };
 
-  // Handle category checkbox changes
   const handleCategoryCheckbox = (e) => {
     const value = Number(e.target.value);
     setSelectedCategories((prev) =>
@@ -310,10 +287,6 @@ function AdminPanel() {
     );
   };
 
-  /*
-   * Handle article form submission
-   * @param {Event} e - The form submission event
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -322,20 +295,16 @@ function AdminPanel() {
       data.append("content", formData.content);
       data.append("tempId", formData.tempId);
       data.append("featured", formData.featured ? "true" : "false");
+      data.append("bulky", formData.isBulky ? "true" : "false"); //Es bulky xq asi lo espera el backend
+      data.append("price", formData.price || "0");
+      data.append("stock", formData.stock || "0");
+      data.append("sku", formData.sku);
 
       if (formData.banner) {
         data.append("banner", formData.banner);
       }
       data.append("categoryIds", JSON.stringify(selectedCategories));
 
-      console.log("Submitting article with data:", {
-        title: formData.title,
-        content: formData.content,
-        tempId: formData.tempId,
-        featured: formData.featured,
-        banner: formData.banner,
-        categoryIds: selectedCategories,
-      });
       await createNewArticle(data, tempIdToken);
       toast.success("Article created successfully");
 
@@ -345,6 +314,10 @@ function AdminPanel() {
         tempId: tempId || "",
         banner: null,
         featured: false,
+        isBulky: false,
+        price: "",
+        stock: "",
+        sku: "",
       });
 
       setSelectedCategories([]);
@@ -353,16 +326,13 @@ function AdminPanel() {
       }
 
       fetchArticles?.();
+      setActiveTab("manage");
     } catch (error) {
       console.error("Error creating article:", error);
       toast.error("Error creating article");
     }
   };
 
-  /*
-   * Handle image upload
-   * @param {Event} e - The form submission event
-   */
   const handleImageUpload = async (e) => {
     e.preventDefault();
     if (!imageData) return;
@@ -394,29 +364,25 @@ function AdminPanel() {
     }
   };
 
-  /*
-   * Handle setting an article for editing
-   * @param {Object} article - The article to edit
-   */
   const setEditingArticle = (article) => {
-    toast.info("Article has been loaded to the form for editing");
+    toast.info("Article loaded for editing");
     setEditingArticleId(article.id);
-    console.log("Editing article:", article);
     setFormData({
       title: article.title,
       content: article.content,
       tempId: article.tempId || "",
       banner: article.banner || null,
       featured: article.featured,
+      isBulky: article.isBulky,
+      price: article.price || "",
+      stock: article.stock || "",
+      sku: article.sku || "",
     });
     setSelectedCategories(article.categories.map((cat) => cat.id));
     setIsEditing(true);
+    setActiveTab("articles");
   };
 
-  /*
-   * Handle deleting an article
-   * @param {string} id - The ID of the article to delete
-   */
   const handleDeleteArticle = async (id) => {
     if (window.confirm("Are you sure you want to delete this article?")) {
       try {
@@ -429,10 +395,6 @@ function AdminPanel() {
     }
   };
 
-  /*
-   * Handle submitting edited article
-   * @param {Event} e - The form submission event
-   */
   const handleSubmitEdit = async (e) => {
     e.preventDefault();
 
@@ -445,10 +407,13 @@ function AdminPanel() {
     data.append("content", formData.content);
     data.append("tempId", formData.tempId);
     data.append("featured", formData.featured ? "true" : "false");
+    data.append("bulky", formData.isBulky ? "true" : "false");
     data.append("articleId", editingArticleId);
+    data.append("price", formData.price || "0");
+    data.append("stock", formData.stock || "0");
+    data.append("sku", formData.sku);
 
-    console.log("featured value:", formData.featured);
-    console.log("featured is boolean:", typeof formData.featured === "boolean");
+    console.log(data);
 
     if (formData.banner instanceof File) {
       data.append("banner", formData.banner);
@@ -459,16 +424,6 @@ function AdminPanel() {
     data.append("categoryIds", JSON.stringify(selectedCategories));
 
     try {
-      console.log("Editing article with data:", {
-        title: formData.title,
-        content: formData.content,
-        tempId: formData.tempId,
-        featured: formData.featured,
-        banner: formData.banner,
-        articleId: editingArticleId,
-        categoryIds: selectedCategories,
-      });
-
       const id = editingArticleId;
 
       await updateExistingArticle(id, data, tempIdToken);
@@ -480,6 +435,10 @@ function AdminPanel() {
         tempId: tempId || "",
         banner: null,
         featured: false,
+        isBulky: false,
+        price: "",
+        stock: "",
+        sku: "",
       });
       setEditingArticleId(null);
       setSelectedCategories([]);
@@ -489,15 +448,14 @@ function AdminPanel() {
       }
 
       fetchArticles?.();
+      setActiveTab("manage");
     } catch (error) {
       console.error("Error updating article:", error);
       toast.error("Error updating article");
     }
   };
 
-  // -------------------
-  //      📦 State
-  // -------------------
+
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState(null);
@@ -506,74 +464,110 @@ function AdminPanel() {
   const isUploadingImage = imageLoading || tempIdLoading;
 
   return (
-    <div className="p-4 space-y-6 max-w-7xl mx-auto">
-      <Fade cascade damping={0.05} triggerOnce duration={400}>
-        <ErrorAlert
-          tempIdError={tempIdError}
-          articleError={articleError}
-          imageError={imageError}
-        />
+    <div className="min-h-screen bg-muted/30">
+      <div className="container mx-auto p-4 max-w-7xl">
+        <Fade triggerOnce duration={400}>
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <LayoutDashboard className="h-8 w-8" />
+              Admin Panel
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Manage articles, categories, and content
+            </p>
+          </div>
 
-        <ArticleForm
-          formData={formData}
-          onChange={handleChange}
-          bannerInputRef={bannerInputRef}
-          imageInputRef={imageInputRef}
-          handleImageChange={handleImageChange}
-          handleImageUpload={handleImageUpload}
-          imageData={imageData}
-          isUploadingImage={isUploadingImage}
-          handleSubmit={handleSubmit}
-          isSubmittingArticle={isSubmittingArticle}
-          categories={categories}
-          selectedCategories={selectedCategories}
-          handleCategoryCheckbox={handleCategoryCheckbox}
-          isEditing={isEditing}
-          cancelEditArticle={cancelEditArticle}
-          handleSubmitEdit={handleSubmitEdit}
-        />
-        <Separator />
-        <CategoryManager
-          categoryForm={categoryForm}
-          onCategoryFormChange={handleCategoryFormChange}
-          onCategorySubmit={handleCategorySubmit}
-          onEditCategory={handleEditCategory}
-          categories={paginatedCategories}
-          categoryAmount={categories.length}
-          categoriesLoading={categoriesLoading}
-          onDeleteCategory={handleDeleteCategory}
-          isEditingCategory={isEditingCategory}
-          onEditCategorySubmit={handleEditCategorySubmit}
-        />
-        {categoriesTotalPages > 1 && (
-          <PaginationControls
-            currentPage={categoriesCurrentPage}
-            totalPages={categoriesTotalPages}
-            onPageChange={handleCategoryPageChange}
+          <ErrorAlert
+            tempIdError={tempIdError}
+            articleError={articleError}
+            imageError={imageError}
           />
-        )}
-        <Separator />
 
-        <div className="space-y-3">
-          <h3 className="text-lg font-bold">Existing Articles</h3>
-          <ArticlesList
-            articles={paginatedArticles}
-            articlesAmount={articles.length}
-            setEditingArticle={setEditingArticle}
-            handleSubmitEdit={handleSubmitEdit}
-            isSubmittingArticle={isSubmittingArticle}
-            isEditing={isEditing}
-            handleDeleteArticle={handleDeleteArticle}
-          />
-        </div>
-        {articlesTotalPages > 1 && (
-          <PaginationControls
-            currentPage={articlesCurrentPage}
-            totalPages={articlesTotalPages}
-            onPageChange={handleArticlePageChange}
-          />
-        )}
-      </Fade>
+          {/* Tabs Navigation */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+              <TabsTrigger value="articles" className="gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Create Article</span>
+                <span className="sm:hidden">Create</span>
+              </TabsTrigger>
+              <TabsTrigger value="manage" className="gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Manage Articles</span>
+                <span className="sm:hidden">Manage</span>
+              </TabsTrigger>
+              <TabsTrigger value="categories" className="gap-2">
+                <FolderTree className="h-4 w-4" />
+                <span className="hidden sm:inline">Categories</span>
+                <span className="sm:hidden">Tags</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Create/Edit Article Tab */}
+            <TabsContent value="articles" className="space-y-4">
+              <ArticleForm
+                formData={formData}
+                onChange={handleChange}
+                bannerInputRef={bannerInputRef}
+                imageInputRef={imageInputRef}
+                handleImageChange={handleImageChange}
+                handleImageUpload={handleImageUpload}
+                imageData={imageData}
+                isUploadingImage={isUploadingImage}
+                handleSubmit={handleSubmit}
+                isSubmittingArticle={isSubmittingArticle}
+                categories={categories}
+                selectedCategories={selectedCategories}
+                handleCategoryCheckbox={handleCategoryCheckbox}
+                isEditing={isEditing}
+                cancelEditArticle={cancelEditArticle}
+                handleSubmitEdit={handleSubmitEdit}
+              />
+            </TabsContent>
+
+            {/* Manage Articles Tab */}
+            <TabsContent value="manage" className="space-y-4">
+              <ArticlesList
+                articles={paginatedArticles}
+                articlesAmount={articles.length}
+                setEditingArticle={setEditingArticle}
+                handleDeleteArticle={handleDeleteArticle}
+              />
+              {articlesTotalPages > 1 && (
+                <PaginationControls
+                  currentPage={articlesCurrentPage}
+                  totalPages={articlesTotalPages}
+                  onPageChange={handleArticlePageChange}
+                />
+              )}
+            </TabsContent>
+
+            {/* Categories Tab */}
+            <TabsContent value="categories" className="space-y-4">
+              <CategoryManager
+                categoryForm={categoryForm}
+                onCategoryFormChange={handleCategoryFormChange}
+                onCategorySubmit={handleCategorySubmit}
+                onEditCategory={handleEditCategory}
+                categories={paginatedCategories}
+                categoryAmount={categories.length}
+                categoriesLoading={categoriesLoading}
+                onDeleteCategory={handleDeleteCategory}
+                isEditingCategory={isEditingCategory}
+                onEditCategorySubmit={handleEditCategorySubmit}
+              />
+              {categoriesTotalPages > 1 && (
+                <PaginationControls
+                  currentPage={categoriesCurrentPage}
+                  totalPages={categoriesTotalPages}
+                  onPageChange={handleCategoryPageChange}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
+        </Fade>
+      </div>
     </div>
   );
 }

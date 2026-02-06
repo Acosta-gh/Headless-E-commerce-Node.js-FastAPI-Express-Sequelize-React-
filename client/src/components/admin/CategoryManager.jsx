@@ -6,12 +6,10 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Trash2, Edit2, Plus } from "lucide-react";
+import { Trash2, Edit2, Plus, X } from "lucide-react";
 
 function CategoryManager({
   categoryForm,
@@ -26,147 +24,148 @@ function CategoryManager({
   onEditCategorySubmit,
 }) {
   return (
-    <div className="w-full mx-auto space-y-6">
-      {/* Form Card */}
-      <Card className="border-l-4 border-l-primary">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            {isEditingCategory ? "Edit Category" : "New Category"}
+    <div className="grid gap-4 lg:grid-cols-[400px_1fr]">
+      {/* Form Card - Fixed width sidebar */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              {isEditingCategory ? (
+                <>
+                  <Edit2 className="w-4 h-4" />
+                  Edit Category
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  New Category
+                </>
+              )}
+            </span>
+            {isEditingCategory && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onEditCategory(null)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </CardTitle>
-          <CardDescription>
-            {isEditingCategory
-              ? "Update the details of your category"
-              : "Create a new category to organize your articles"}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form
             onSubmit={
               isEditingCategory ? onEditCategorySubmit : onCategorySubmit
             }
-            className="space-y-4"
+            className="space-y-3"
           >
-            {/* Name Field */}
-            <div className="space-y-2">
-              <Label htmlFor="cat-name" className="text-sm font-medium">
+            <div className="space-y-1.5">
+              <Label htmlFor="cat-name" className="text-xs font-medium">
                 Name
               </Label>
               <Input
                 id="cat-name"
                 name="name"
-                placeholder="E.g., Technology, Health, Lifestyle"
+                placeholder="Technology, Health..."
                 value={categoryForm.name}
                 onChange={onCategoryFormChange}
                 required
-                className="transition-colors focus:ring-2"
+                className="h-9"
               />
             </div>
 
-            {/* Description Field */}
-            <div className="space-y-2">
-              <Label htmlFor="cat-desc" className="text-sm font-medium">
+            <div className="space-y-1.5">
+              <Label htmlFor="cat-desc" className="text-xs font-medium">
                 Description
               </Label>
               <Textarea
                 id="cat-desc"
                 name="description"
-                placeholder="A brief description of the category"
+                placeholder="Brief description..."
                 value={categoryForm.description}
                 onChange={onCategoryFormChange}
                 rows={3}
-                className="resize-none transition-colors focus:ring-2"
+                className="resize-none text-sm"
               />
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="submit"
-                disabled={categoriesLoading}
-                className="flex-1"
-              >
-                {categoriesLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2" />
-                    {isEditingCategory ? "Updating..." : "Creating..."}
-                  </>
-                ) : isEditingCategory ? (
-                  "Update Category"
-                ) : (
-                  "Create Category"
-                )}
-              </Button>
-              {isEditingCategory && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onEditCategory(null)}
-                >
-                  Cancel
-                </Button>
+            <Button
+              type="submit"
+              disabled={categoriesLoading}
+              className="w-full h-9"
+              size="sm"
+            >
+              {categoriesLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-2" />
+                  {isEditingCategory ? "Updating..." : "Creating..."}
+                </>
+              ) : isEditingCategory ? (
+                "Update"
+              ) : (
+                "Create Category"
               )}
-            </div>
+            </Button>
           </form>
         </CardContent>
       </Card>
+
       {/* Categories List */}
       <div className="space-y-3">
-        <div className="px-1">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Categories ({categoryAmount})
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Manage your existing categories below.
-          </p>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            All Categories ({categoryAmount})
+          </h3>
         </div>
 
         {categories.length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="py-8 text-center">
-              <p className="text-muted-foreground">
-                There are no categories yet. Create one to get started!
+            <CardContent className="py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                No categories yet. Create one to get started!
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((cat) => (
               <Card
                 key={cat.id}
-                className="hover:shadow-md transition-all duration-200 group"
+                className="hover:shadow-sm transition-all duration-200 group"
               >
-                <CardContent className="py-4 px-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                <CardContent className="p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
                         {cat.name}
-                      </h3>
-                      {cat.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {cat.description}
-                        </p>
-                      )}
+                      </h4>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <Button
+                          onClick={() => onEditCategory(cat)}
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onDeleteCategory(cat.id)}
+                          className="h-7 w-7 p-0 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        onClick={() => onEditCategory(cat)}
-                        size="sm"
-                        variant="outline"
-                        className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => onDeleteCategory(cat.id)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {cat.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {cat.description}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
