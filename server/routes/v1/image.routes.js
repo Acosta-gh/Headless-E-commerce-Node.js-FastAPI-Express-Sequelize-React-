@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 // ======================================================================
-//                   🖼️ Image Controllers
+//                   🖼️ MarkdownImage Controllers
 // ======================================================================
 const { createImage, getAllImages } = require("@/controllers/image.controller");
 
@@ -19,7 +19,7 @@ const { isAdmin } = require("@/middlewares/isAdmin.middleware");
 const { verifyJWT } = require("@/middlewares/verifyJWT.middleware");
 
 // ======================================================================
-//                      🖼️ Image Routes
+//                      🖼️ MarkdownImage Routes
 // ======================================================================
 // Create a new image
 router.post(

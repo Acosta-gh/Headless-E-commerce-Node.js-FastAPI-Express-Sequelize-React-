@@ -1,8 +1,8 @@
-const { Image } = require("@/models/index");
+const { MarkdownImage } = require("@/models/index");
 
 const adoptTempImages = async (tempId, articleId) => {
   if (!tempId) return;
-  const images = await Image.findAll({ where: { tempId } });
+  const images = await MarkdownImage.findAll({ where: { tempId } });
   if (images.length === 0) return;
 
   await Promise.all(

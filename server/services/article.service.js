@@ -55,7 +55,7 @@ const createArticle = async (data) => {
 
     return article.get({ plain: true });
   } catch (error) {
-    throw new Error("Error creating article: " + error.message);
+    console.error("Error sending article notifications:", error);
   }
 };
 
