@@ -18,7 +18,7 @@ async function createImage(req, res) {
       return res.status(400).json({ error: "No image file uploaded" });
     }
 
-    let { tempId, articleId } = req.body;
+    let { tempId, articleId, type } = req.body;
 
     // If we are creating a new image, either tempId or articleId must be provided
     if (!tempId && !articleId) {
@@ -38,6 +38,7 @@ async function createImage(req, res) {
       tempId,
       articleId,
       url: imageUrl,
+      type: type ?? "markdown",
     });
 
     return res.status(201).json(image);

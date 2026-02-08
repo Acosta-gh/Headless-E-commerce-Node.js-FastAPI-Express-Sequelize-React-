@@ -7,7 +7,7 @@ const articleService = require("@/services/article.service");
 
 async function createArticle(req, res) {
   const authorId = req.user.id;
-  
+
   // Parse categoryIds from request body
   let categoryIds = [];
   if (req.body.categoryIds) {
@@ -24,7 +24,7 @@ async function createArticle(req, res) {
     }
 
     const { title, content, tempId, featured, bulky, stock, price, sku } = req.body;
-    
+
     // Convert to boolean
     const isFeatured = featured === "true" || featured === true;
     const isBulky = bulky === "true" || bulky === true;
@@ -45,11 +45,21 @@ async function createArticle(req, res) {
 
     return res.status(201).json(article);
   } catch (error) {
-    console.error("Error creating article:", error);
-    return res
-      .status(500)
-      .json({ error: "Error creating article: " + error.message });
+    console.error("Controller error:", error);
+
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        error: "Duplicate value",
+        field: error.errors[0].path,
+        message: error.errors[0].message,
+      });
+    }
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
   }
+
 }
 
 async function getAllArticles(req, res) {
@@ -78,7 +88,7 @@ async function updateArticle(req, res) {
     const { title, content, categoryIds, featured, bulky, stock, price, sku } = req.body;
 
     const isFeatured = featured === "true" || featured === true;
-    const isBulky = bulky === "true" || bulky === true; 
+    const isBulky = bulky === "true" || bulky === true;
 
     const parsedCategoryIds =
       typeof categoryIds === "string" ? JSON.parse(categoryIds) : categoryIds;
@@ -96,7 +106,7 @@ async function updateArticle(req, res) {
       content,
       banner: bannerPath,
       featured: isFeatured,
-      isBulky: isBulky, 
+      isBulky: isBulky,
       stock: Number(stock),
       price: Number(price),
       sku,

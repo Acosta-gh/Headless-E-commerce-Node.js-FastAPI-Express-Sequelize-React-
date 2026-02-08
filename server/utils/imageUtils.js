@@ -1,4 +1,4 @@
-const { Image } = require("@/models/index");
+const { Image } = require("../models/index");
 
 const adoptTempImages = async (tempId, articleId) => {
   if (!tempId) return;

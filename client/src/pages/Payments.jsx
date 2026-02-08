@@ -329,6 +329,8 @@ function Payments() {
                                             />
                                         </Button>
 
+
+                                        {/* 
                                         <Button
                                             variant="outline"
                                             size="sm"
@@ -336,6 +338,7 @@ function Payments() {
                                         >
                                             <Trash2 className="h-4 w-4 text-destructive" />
                                         </Button>
+                                         */}
                                     </CardFooter>
                                 </Card>
                             ))}

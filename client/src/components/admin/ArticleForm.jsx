@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 
 import ImageUploader from "@/components/admin/ImageUploader";
+import GalleryUploader from "@/components/admin/GalleryUploader";
+
 import { BACKEND_URL } from "@/components/Constants";
 
 function ArticleForm({
@@ -39,6 +41,10 @@ function ArticleForm({
   handleImageUpload,
   imageData,
   isUploadingImage,
+  isUploadingGallery,
+  uploadNewImage,
+  tempId,
+  tempIdToken,
   handleSubmit,
   isSubmittingArticle,
   categories,
@@ -47,6 +53,7 @@ function ArticleForm({
   isEditing,
   cancelEditArticle,
   handleSubmitEdit,
+  existingImages = [], // NEW: Gallery images from article being edited
 }) {
   const [bannerPreview, setBannerPreview] = useState(null);
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -252,6 +259,24 @@ function ArticleForm({
                 </div>
               )}
             </div>
+
+            {/* Gallery Uploader */}
+            {uploadNewImage ? (
+              <GalleryUploader
+                uploadNewImage={uploadNewImage}
+                tempId={tempId}
+                tempIdToken={tempIdToken}
+                isUploading={isUploadingGallery}
+                existingImages={isEditing ? existingImages : []} // Pass existing images when editing
+                onComplete={() => {
+                  // Optional: action after all uploads complete
+                }}
+              />
+            ) : (
+              <div className="p-3 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
+                ℹ️ Loading...
+              </div>
+            )}
 
             {/* Markdown Toolbar */}
             <div className="space-y-2">

@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const { sequelize } = require("@/database/sequelize"); 
+const { sequelize } = require("@/database/sequelize");
 
 const Image = sequelize.define(
   "Image",
@@ -15,6 +15,11 @@ const Image = sequelize.define(
     url: { // URL of the image
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    type: {
+      type: DataTypes.ENUM("markdown", "gallery"),
+      allowNull: false,
+      defaultValue: "markdown",
     },
   },
   {

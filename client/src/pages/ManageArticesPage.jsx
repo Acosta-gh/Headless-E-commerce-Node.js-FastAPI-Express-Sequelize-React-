@@ -91,6 +91,7 @@ function AdminPanel() {
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [activeTab, setActiveTab] = useState("articles");
+  const [existingGalleryImages, setExistingGalleryImages] = useState([]); // NEW: Store gallery images from edited article
 
   // -------------------
   // Pagination for Articles
@@ -152,7 +153,7 @@ function AdminPanel() {
     } else {
       fetchTempId?.();
     }
-  }, [tempId]);
+  }, [tempId, fetchTempId]);
 
   useEffect(() => {
     if (categoriesCurrentPage > categoriesTotalPages) {
@@ -209,6 +210,7 @@ function AdminPanel() {
       sku: "",
     });
     setSelectedCategories([]);
+    setExistingGalleryImages([]); // Clear gallery images
     if (bannerInputRef.current) {
       bannerInputRef.current.value = "";
     }
@@ -295,7 +297,7 @@ function AdminPanel() {
       data.append("content", formData.content);
       data.append("tempId", formData.tempId);
       data.append("featured", formData.featured ? "true" : "false");
-      data.append("bulky", formData.isBulky ? "true" : "false"); //Es bulky xq asi lo espera el backend
+      data.append("bulky", formData.isBulky ? "true" : "false");
       data.append("price", formData.price || "0");
       data.append("stock", formData.stock || "0");
       data.append("sku", formData.sku);
@@ -321,6 +323,7 @@ function AdminPanel() {
       });
 
       setSelectedCategories([]);
+      setExistingGalleryImages([]);
       if (bannerInputRef.current) {
         bannerInputRef.current.value = "";
       }
@@ -347,17 +350,22 @@ function AdminPanel() {
 
       const uploadedImage = await uploadNewImage(data, tempIdToken);
 
+      console.log("uploadedImage:" + uploadedImage);
+
       toast.success("Image uploaded successfully");
       setImageData(null);
       if (imageInputRef.current) {
         imageInputRef.current.value = "";
       }
-      setFormData((prevData) => ({
-        ...prevData,
-        content:
-          prevData.content +
-          `\n![alt text](${BACKEND_URL}${uploadedImage.url})`,
-      }));
+
+      if (uploadedImage.type === "markdown") {
+        setFormData((prevData) => ({
+          ...prevData,
+          content:
+            prevData.content +
+            `\n![alt text](${BACKEND_URL}${uploadedImage.url})`,
+        }));
+      }
     } catch (error) {
       console.error("Error uploading image:", error);
       toast.error("Error uploading image");
@@ -379,6 +387,13 @@ function AdminPanel() {
       sku: article.sku || "",
     });
     setSelectedCategories(article.categories.map((cat) => cat.id));
+    
+    // Extract gallery images (type: "gallery")
+    const galleryImages = article.images
+      ? article.images.filter((img) => img.type === "gallery")
+      : [];
+    setExistingGalleryImages(galleryImages);
+    
     setIsEditing(true);
     setActiveTab("articles");
   };
@@ -442,6 +457,7 @@ function AdminPanel() {
       });
       setEditingArticleId(null);
       setSelectedCategories([]);
+      setExistingGalleryImages([]);
       setIsEditing(false);
       if (bannerInputRef.current) {
         bannerInputRef.current.value = "";
@@ -455,13 +471,13 @@ function AdminPanel() {
     }
   };
 
-
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState(null);
 
   const isSubmittingArticle = articleLoading || tempIdLoading;
   const isUploadingImage = imageLoading || tempIdLoading;
+  const isUploadingGallery = imageLoading || tempIdLoading;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -515,6 +531,7 @@ function AdminPanel() {
                 handleImageUpload={handleImageUpload}
                 imageData={imageData}
                 isUploadingImage={isUploadingImage}
+                isUploadingGallery={isUploadingGallery}
                 handleSubmit={handleSubmit}
                 isSubmittingArticle={isSubmittingArticle}
                 categories={categories}
@@ -523,6 +540,10 @@ function AdminPanel() {
                 isEditing={isEditing}
                 cancelEditArticle={cancelEditArticle}
                 handleSubmitEdit={handleSubmitEdit}
+                uploadNewImage={uploadNewImage}
+                tempId={tempId}
+                tempIdToken={tempIdToken}
+                existingImages={existingGalleryImages} // Pass existing gallery images
               />
             </TabsContent>
 

@@ -74,6 +74,13 @@ const OrderItem = sequelize.define(
       allowNull: true,
       comment: 'Product variants (e.g., {color: "red", size: "M"})',
     },
+    
+    isBulky: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Snapshot: product was bulky at time of purchase'
+    },
 
     // =====================
     // Additional Information
