@@ -88,7 +88,7 @@ const getArticleById = async (id) => {
     const article = await Article.findByPk(id, {
       include: [
         { model: User, as: "author", attributes: ["id", "username", "email"] },
-        { model: Image, as: "images", attributes: ["id", "url"] },
+        { model: Image, as: "images", attributes: ["id", "url", "type"] },
         {
           model: Like,
           as: "likes",
@@ -114,7 +114,7 @@ const getArticleBySlug = async (slug) => {
       where: { slug: slug },
       include: [
         { model: User, as: "author", attributes: ["id", "username", "email"] },
-        { model: Image, as: "images", attributes: ["id", "url"] },
+        { model: Image, as: "images", attributes: ["id", "url", "type"] },
         {
           model: Like,
           as: "likes",
@@ -140,7 +140,7 @@ const updateArticle = async (id, data) => {
     const article = await Article.findByPk(id);
     if (!article) throw new Error("Article not found");
 
-    const { categoryIds, ...articleData } = data;
+    const { categoryIds, tempId, ...articleData } = data;
     await article.update(articleData);
 
     if (Array.isArray(categoryIds)) {
@@ -148,6 +148,10 @@ const updateArticle = async (id, data) => {
         ? await Category.findAll({ where: { id: categoryIds } })
         : [];
       await article.setCategories(categories);
+    }
+
+    if (tempId) {
+      await adoptTempImages(tempId, article.id);
     }
 
     return article.get({ plain: true });

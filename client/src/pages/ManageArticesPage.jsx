@@ -57,6 +57,7 @@ function AdminPanel() {
   const {
     uploadNewImage,
     imageUrl,
+    deleteImageById,
     loading: imageLoading,
     error: imageError,
   } = useImage();
@@ -75,6 +76,7 @@ function AdminPanel() {
   // -------------------
   const [formData, setFormData] = useState({
     title: "",
+    shortDescription: "",
     content: "",
     tempId: "",
     banner: null,
@@ -84,6 +86,7 @@ function AdminPanel() {
     stock: "",
     sku: "",
   });
+
   const [imageData, setImageData] = useState(null);
   const [categoryForm, setCategoryForm] = useState({
     name: "",
@@ -200,6 +203,7 @@ function AdminPanel() {
     setEditingArticleId(null);
     setFormData({
       title: "",
+      shortDescription: "",
       content: "",
       tempId: tempId || "",
       banner: null,
@@ -291,6 +295,11 @@ function AdminPanel() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("🔵 handleSubmit called");
+    console.log("formData:", formData);
+    console.log("tempIdToken:", tempIdToken);
+    console.log("selectedCategories:", selectedCategories);
+
     try {
       const data = new FormData();
       data.append("title", formData.title);
@@ -307,11 +316,14 @@ function AdminPanel() {
       }
       data.append("categoryIds", JSON.stringify(selectedCategories));
 
+      console.log("📤 Enviando a backend...");
       await createNewArticle(data, tempIdToken);
+      toast.success("Article created successfully");
       toast.success("Article created successfully");
 
       setFormData({
         title: "",
+        shortDescription: "",
         content: "",
         tempId: tempId || "",
         banner: null,
@@ -377,6 +389,7 @@ function AdminPanel() {
     setEditingArticleId(article.id);
     setFormData({
       title: article.title,
+      shortDescription: article.shortDescription,
       content: article.content,
       tempId: article.tempId || "",
       banner: article.banner || null,
@@ -387,13 +400,13 @@ function AdminPanel() {
       sku: article.sku || "",
     });
     setSelectedCategories(article.categories.map((cat) => cat.id));
-    
+
     // Extract gallery images (type: "gallery")
     const galleryImages = article.images
       ? article.images.filter((img) => img.type === "gallery")
       : [];
     setExistingGalleryImages(galleryImages);
-    
+
     setIsEditing(true);
     setActiveTab("articles");
   };
@@ -413,12 +426,19 @@ function AdminPanel() {
   const handleSubmitEdit = async (e) => {
     e.preventDefault();
 
+    console.log("🔴 handleSubmitEdit called");
+    console.log("editingArticleId:", editingArticleId);
+    console.log("tempId:", tempId);
+    console.log("formData.tempId:", formData.tempId);
+
+
     if (!editingArticleId) {
       toast.error("No article selected for editing");
       return;
     }
     const data = new FormData();
     data.append("title", formData.title);
+    data.append("shortDescription", formData.shortDescription);
     data.append("content", formData.content);
     data.append("tempId", formData.tempId);
     data.append("featured", formData.featured ? "true" : "false");
@@ -428,7 +448,10 @@ function AdminPanel() {
     data.append("stock", formData.stock || "0");
     data.append("sku", formData.sku);
 
-    console.log(data);
+    console.log("📤 FormData contents:");
+    for (let [key, value] of data.entries()) {
+      console.log(`  ${key}: ${value}`);
+    }
 
     if (formData.banner instanceof File) {
       data.append("banner", formData.banner);
@@ -443,9 +466,11 @@ function AdminPanel() {
 
       await updateExistingArticle(id, data, tempIdToken);
       toast.success("Article updated successfully");
+      console.log("✅ Article updated");
 
       setFormData({
         title: "",
+        shortDescription: "",
         content: "",
         tempId: tempId || "",
         banner: null,
@@ -455,6 +480,7 @@ function AdminPanel() {
         stock: "",
         sku: "",
       });
+
       setEditingArticleId(null);
       setSelectedCategories([]);
       setExistingGalleryImages([]);
@@ -540,7 +566,9 @@ function AdminPanel() {
                 isEditing={isEditing}
                 cancelEditArticle={cancelEditArticle}
                 handleSubmitEdit={handleSubmitEdit}
+                editingArticleId={editingArticleId}
                 uploadNewImage={uploadNewImage}
+                deleteImageById={deleteImageById}
                 tempId={tempId}
                 tempIdToken={tempIdToken}
                 existingImages={existingGalleryImages} // Pass existing gallery images

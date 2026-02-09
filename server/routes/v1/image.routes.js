@@ -1,12 +1,9 @@
 const express = require("express");
 const router = express.Router();
-
 // ======================================================================
-//                   🖼️ MarkdownImage Controllers
+//                   🖼️ Image Controllers
 // ======================================================================
-const { createImage, getAllImages } = require("@/controllers/image.controller");
-
-
+const { createImage, getAllImages, destroyImage } = require("@/controllers/image.controller");
 // ======================================================================
 //               🔐 Authentication & Authorization Middlewares
 // ======================================================================
@@ -19,8 +16,9 @@ const { isAdmin } = require("@/middlewares/isAdmin.middleware");
 const { verifyJWT } = require("@/middlewares/verifyJWT.middleware");
 
 // ======================================================================
-//                      🖼️ MarkdownImage Routes
+//                      🖼️ Image Routes
 // ======================================================================
+
 // Create a new image
 router.post(
   "/",
@@ -31,7 +29,16 @@ router.post(
   verifyTempIdToken,
   createImage
 );
+
 // Get all images
 router.get("/", getAllImages);
+
+// Delete an image by ID ← AGREGAR ESTA RUTA
+router.delete(
+  "/:id",
+  verifyJWT,
+  isAdmin,
+  destroyImage
+);
 
 module.exports = router;

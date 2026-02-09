@@ -13,8 +13,8 @@ const { deleteImageById } = require("@/services/image.service");
 // 🖼️ Cleanup orphaned images
 // ============================================================================
 // Schedule a task to run monthly to clean up orphaned images
-// Runs at 3:00 AM on the 1st of every month
-cron.schedule("0 3 1 * *", async () => {
+// Runs at 3:00 AM 
+cron.schedule("0 3 * * *", async () => {
 //cron.schedule('* * * * *', async () => {
   try {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago

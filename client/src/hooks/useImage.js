@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { uploadImage } from "@/services/image.services";
+import { uploadImage, deleteImage as deleteImageService } from "@/services/image.services";
 import { useAuth } from "@/hooks/useAuth";
 
 export const useImage = () => {
@@ -44,10 +44,31 @@ export const useImage = () => {
     }
   }, [token]);
 
+  /**
+   * Delete an image by ID
+   * Removes from database and filesystem
+   * 
+   * @param {number|string} imageId - The image ID to delete
+   * @returns {Promise<boolean>} True if successful
+   */
+  const deleteImageById = useCallback(async (imageId) => {
+    setLoading(true);
+    try {
+      await deleteImageService(imageId, token);
+      return true;
+    } catch (error) {
+      setError(error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
   return {
     imageUrl,
     loading,
     error,
     uploadNewImage,
+    deleteImageById,
   };
 };

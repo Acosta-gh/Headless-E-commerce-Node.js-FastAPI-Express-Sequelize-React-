@@ -25,6 +25,11 @@ const Article = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    shortDescription: {
+      // Short description / summary
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
     content: {
       // Main content of the article
       type: DataTypes.TEXT,

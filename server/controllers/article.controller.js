@@ -23,7 +23,7 @@ async function createArticle(req, res) {
       bannerPath = `/uploads/${req.file.filename}`;
     }
 
-    const { title, content, tempId, featured, bulky, stock, price, sku } = req.body;
+    const { title, shortDescription, content, tempId, featured, bulky, stock, price, sku } = req.body;
 
     // Convert to boolean
     const isFeatured = featured === "true" || featured === true;
@@ -33,6 +33,7 @@ async function createArticle(req, res) {
       authorId,
       title,
       content,
+      shortDescription,
       banner: bannerPath,
       tempId,
       sku,
@@ -85,7 +86,7 @@ async function updateArticle(req, res) {
 
   try {
     const authorId = req.user.id;
-    const { title, content, categoryIds, featured, bulky, stock, price, sku } = req.body;
+    const { title, content, shortDescription, categoryIds, featured, bulky, stock, price, sku } = req.body;
 
     const isFeatured = featured === "true" || featured === true;
     const isBulky = bulky === "true" || bulky === true;
@@ -103,6 +104,7 @@ async function updateArticle(req, res) {
     const article = await articleService.updateArticle(req.params.id, {
       authorId,
       title,
+      shortDescription,
       content,
       banner: bannerPath,
       featured: isFeatured,

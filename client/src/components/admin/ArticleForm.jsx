@@ -43,8 +43,10 @@ function ArticleForm({
   isUploadingImage,
   isUploadingGallery,
   uploadNewImage,
+  deleteImageById,
   tempId,
   tempIdToken,
+  editingArticleId,
   handleSubmit,
   isSubmittingArticle,
   categories,
@@ -264,13 +266,13 @@ function ArticleForm({
             {uploadNewImage ? (
               <GalleryUploader
                 uploadNewImage={uploadNewImage}
+                deleteImageById={deleteImageById}
                 tempId={tempId}
                 tempIdToken={tempIdToken}
                 isUploading={isUploadingGallery}
-                existingImages={isEditing ? existingImages : []} // Pass existing images when editing
-                onComplete={() => {
-                  // Optional: action after all uploads complete
-                }}
+                articleId={isEditing ? editingArticleId : null}
+                existingImages={isEditing ? existingImages : []}
+                onComplete={() => { }}
               />
             ) : (
               <div className="p-3 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
@@ -304,6 +306,22 @@ function ArticleForm({
                   isUploadingImage={isUploadingImage}
                 />
               </div>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-1.5">
+              <Label htmlFor="content" className="text-xs font-medium">
+                Short Description*
+              </Label>
+              <Textarea
+                id="shortDescription"
+                name="shortDescription"
+                placeholder="Write your shortDescription here..."
+                value={formData.shortDescription}
+                onChange={onChange}
+                required
+                className="min-h-18 font-mono text-xs resize-y"
+              />
             </div>
 
             {/* Content */}

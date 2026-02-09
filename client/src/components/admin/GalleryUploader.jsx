@@ -1,41 +1,49 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Upload, ImageIcon, Check, X } from "lucide-react";
+import { Loader2, Upload, ImageIcon, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BACKEND_URL } from "@/components/Constants";
 
 /**
- * GalleryUploader - Upload multiple images with thumbnails
- * Supports both new uploads and displaying existing gallery images
+ * GalleryUploader - Upload and manage multiple images with thumbnails
+ * Supports uploading new images, displaying existing images, and deleting both
  * 
  * @param {Function} uploadNewImage - From useImage hook
+ * @param {Function} deleteImageById - From useImage hook (NEW)
  * @param {string} tempId - Temporary ID
  * @param {string} tempIdToken - Token for uploads
  * @param {boolean} isUploading - Loading state
  * @param {Array} existingImages - Existing gallery images from article
+ * @param {Function} onImageDeleted - Callback when image is deleted (NEW)
  * @param {Function} onComplete - Callback after upload
  */
-function GalleryUploader({ 
-  uploadNewImage, 
-  tempId, 
-  tempIdToken, 
-  isUploading, 
+function GalleryUploader({
+  uploadNewImage,
+  deleteImageById,
+  tempId,
+  tempIdToken,
+  isUploading,
   existingImages = [],
-  onComplete 
+  articleId = null,
+  onImageDeleted = () => { },
+  onComplete = () => { }
 }) {
   const inputRef = useRef(null);
-  const [selectedImages, setSelectedImages] = useState([]); // { file, preview, id, status }
+  const [selectedImages, setSelectedImages] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState(null);
 
   // Initialize with existing images when editing
   useEffect(() => {
     if (existingImages && existingImages.length > 0) {
       const existing = existingImages.map((img) => ({
         id: `existing-${img.id}`,
+        databaseId: img.id, // Store the actual database ID
         url: img.url,
         preview: `${BACKEND_URL}${img.url}`,
-        status: "success", // Mark as already uploaded
+        status: "success",
         isExisting: true,
         originalId: img.id,
       }));
@@ -58,21 +66,49 @@ function GalleryUploader({
 
     setSelectedImages((prev) => [...prev, ...newImages]);
 
-    // Reset input
     if (inputRef.current) {
       inputRef.current.value = "";
     }
   };
 
-  // Remove image from selection
-  const removeImage = (id) => {
-    setSelectedImages((prev) => {
-      const image = prev.find((img) => img.id === id);
-      if (image?.preview && !image.isExisting) {
-        URL.revokeObjectURL(image.preview);
+  // Remove image from selection (frontend only for new images, call API for existing)
+  const handleRemoveImage = async (imageId, isExisting, databaseId) => {
+    if (isExisting && databaseId) {
+      // Delete from backend
+      setDeleting(true);
+      setDeletingImageId(imageId);
+
+      try {
+        await deleteImageById(databaseId);
+
+        // Remove from state
+        setSelectedImages((prev) => prev.filter((img) => img.id !== imageId));
+
+        // Revoke object URL if it exists
+        const image = selectedImages.find(img => img.id === imageId);
+        if (image?.preview && !image.isExisting) {
+          URL.revokeObjectURL(image.preview);
+        }
+
+        toast.success("Image deleted successfully");
+        onImageDeleted(databaseId);
+      } catch (error) {
+        console.error("Error deleting image:", error);
+        toast.error("Failed to delete image");
+      } finally {
+        setDeleting(false);
+        setDeletingImageId(null);
       }
-      return prev.filter((img) => img.id !== id);
-    });
+    } else {
+      // Remove new image from frontend only
+      setSelectedImages((prev) => {
+        const image = prev.find((img) => img.id === imageId);
+        if (image?.preview && !image.isExisting) {
+          URL.revokeObjectURL(image.preview);
+        }
+        return prev.filter((img) => img.id !== imageId);
+      });
+    }
   };
 
   // Upload all NEW selected images
@@ -96,23 +132,24 @@ function GalleryUploader({
 
     for (const imageObj of imagesToUpload) {
       try {
-        // Update status to uploading
         setSelectedImages((prev) =>
           prev.map((img) =>
             img.id === imageObj.id ? { ...img, status: "uploading" } : img
           )
         );
 
-        // Create FormData with image and tempId
         const formData = new FormData();
         formData.append("image", imageObj.file);
-        formData.append("tempId", tempId);
         formData.append("type", "gallery");
 
-        // Upload
+        if (articleId) {
+          formData.append("articleId", articleId);
+        } else {
+          formData.append("tempId", tempId);
+        }
+        
         await uploadNewImage(formData, tempIdToken);
 
-        // Update status to success
         setSelectedImages((prev) =>
           prev.map((img) =>
             img.id === imageObj.id ? { ...img, status: "success" } : img
@@ -120,7 +157,6 @@ function GalleryUploader({
         );
         successCount++;
       } catch (error) {
-        // Update status to error
         setSelectedImages((prev) =>
           prev.map((img) =>
             img.id === imageObj.id ? { ...img, status: "error" } : img
@@ -132,7 +168,6 @@ function GalleryUploader({
 
     setUploading(false);
 
-    // Show result
     if (successCount > 0) {
       toast.success(`${successCount} image${successCount > 1 ? "s" : ""} uploaded`);
     }
@@ -140,13 +175,13 @@ function GalleryUploader({
     onComplete?.();
   };
 
-  const isDisabled = isUploading || uploading;
+  const isDisabled = isUploading || uploading || deleting;
   const pendingImages = selectedImages.filter((img) => img.status === "pending");
 
   return (
     <div className="space-y-3">
       {/* Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Input
           ref={inputRef}
           id="gallery-upload"
@@ -202,21 +237,21 @@ function GalleryUploader({
 
         {/* Counter */}
         {selectedImages.length > 0 && (
-          <span className="text-xs text-muted-foreground ml-auto">
+          <span className="text-xs text-muted-foreground">
             {selectedImages.length} image{selectedImages.length > 1 ? "s" : ""}
             {pendingImages.length > 0 && ` (${pendingImages.length} new)`}
           </span>
         )}
 
         {/* Ready indicator */}
-        {selectedImages.every((img) => img.status === "success") && 
-          selectedImages.length > 0 && 
+        {selectedImages.every((img) => img.status === "success") &&
+          selectedImages.length > 0 &&
           !isDisabled && (
-          <div className="flex items-center gap-1 text-xs text-green-600">
-            <Check className="h-3 w-3" />
-            <span className="hidden sm:inline">Done</span>
-          </div>
-        )}
+            <div className="flex items-center gap-1 text-xs text-green-600">
+              <Check className="h-3 w-3" />
+              <span className="hidden sm:inline">All set</span>
+            </div>
+          )}
       </div>
 
       {/* Thumbnails Grid */}
@@ -231,17 +266,16 @@ function GalleryUploader({
               <img
                 src={image.preview}
                 alt="gallery thumbnail"
-                className={`w-full h-24 object-cover transition-opacity ${
-                  image.status === "success" || image.status === "error"
+                className={`w-full h-24 object-cover transition-opacity ${image.status === "success" || image.status === "error"
                     ? "opacity-50"
                     : ""
-                }`}
+                  }`}
               />
 
               {/* Existing Badge */}
               {image.isExisting && (
                 <div className="absolute top-1 left-1 bg-blue-500 text-white px-2 py-0.5 rounded text-xs font-semibold">
-                  Existing
+                  Saved
                 </div>
               )}
 
@@ -264,21 +298,25 @@ function GalleryUploader({
                 </div>
               )}
 
-              {/* Remove button */}
+              {/* Delete button - appears on hover */}
               <button
                 type="button"
-                onClick={() => removeImage(image.id)}
-                disabled={image.status === "uploading"}
+                onClick={() => handleRemoveImage(image.id, image.isExisting, image.databaseId)}
+                disabled={image.status === "uploading" || (deleting && deletingImageId === image.id)}
                 className="absolute top-1 right-1 bg-black/70 hover:bg-red-600 text-white rounded-full p-1 opacity-60 group-hover:opacity-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
-                title={image.isExisting ? "Remove from gallery" : "Remove image"}
+                title={image.isExisting ? "Delete from gallery" : "Remove image"}
               >
-                <X className="h-3 w-3" />
+                {deleting && deletingImageId === image.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
               </button>
 
               {/* File name on hover */}
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end p-1 pointer-events-none">
                 <p className="text-xs text-white opacity-0 group-hover:opacity-100 truncate max-w-full">
-                  {image.file?.name || "Existing image"}
+                  {image.file?.name || "Saved image"}
                 </p>
               </div>
             </div>
