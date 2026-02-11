@@ -1,5 +1,4 @@
 import React from "react";
-
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Link as LinkIcon } from "lucide-react";
@@ -11,21 +10,22 @@ function ShareButton({ url }) {
   const handleCopy = () => {
     const link = url || window.location.href;
     navigator.clipboard.writeText(link);
-    toast.success("Link copied to clipboard!", {
+    toast.success("Link copiado al portapapeles!", {
       duration: 1000,
       action: { label: "OK", onClick: () => {} },
     });
   };
+
   return (
     <div className="flex items-center space-x-3">
       <Button
         variant="outline"
         size="icon"
-        className="hover:bg-blog-hover h-9 w-9 rounded-full cursor-pointer"
+        className="h-9 w-9 rounded-full"
         onClick={handleCopy}
-        aria-label="Copy link"
+        aria-label="Copiar link"
       >
-        <LinkIcon />
+        <LinkIcon className="h-4 w-4" />
       </Button>
     </div>
   );

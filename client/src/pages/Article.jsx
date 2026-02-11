@@ -34,6 +34,8 @@ function Article() {
   //      📦 State
   // -------------------
   const [commentAmount, setCommentAmount] = useState(0);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [quantity, setQuantity] = useState(1);
 
   // -------------------
   //      🪝 Hooks
@@ -80,7 +82,7 @@ function Article() {
         await fetchAllCommentsByArticleId(articleId);
       } catch (error) {
         console.error(error);
-        toast.error("Failed to load article.");
+        toast.error("Error al cargar el producto.");
       }
     };
 
@@ -96,10 +98,6 @@ function Article() {
     }
   };
 
-  /*
-  * Handle adding a like to an article or comment
-  @param {string} commentId - ID of the comment (optional)
-  */
   const handleAddLike = useCallback(
     async (commentId) => {
       if (!articleId) return;
@@ -112,31 +110,70 @@ function Article() {
     [articleId, toggleLikeStatus]
   );
 
-  /*
-  + * Handle adding a reply to a comment
-  + @param {string} content - Content of the reply
-  + @param {string} parentId - ID of the parent comment
-  + */
   const handleAddReply = async (content, parentId) => {
     try {
       if (!articleId) return;
       await addComment({ articleId, commentId: parentId, content });
     } catch (error) {
-      console.error("Error adding reply:", error);
+      console.error("Error al agregar respuesta:", error);
     }
   };
 
-  /*
-  * Handle adding a new comment
-  @param {string} content - Content of the comment
-  */
   const handleAddComment = async (content) => {
     try {
       if (!articleId) return;
       await addComment({ articleId, content });
     } catch (error) {
-      console.error("Error adding comment:", error);
+      console.error("Error al agregar comentario:", error);
     }
+  };
+
+  const handleAddToCart = () => {
+    toast.success(`${quantity} ${quantity === 1 ? 'unidad' : 'unidades'} agregadas al carrito`, {
+      duration: 3000,
+    });
+  };
+
+  const handleBuyNow = () => {
+    toast.success("Redirigiendo al checkout...", {
+      duration: 2000,
+    });
+  };
+
+  // Get gallery images (banner + gallery type images)
+  const getGalleryImages = () => {
+    if (!article) return [];
+    
+    const images = [];
+    
+    // Add banner first
+    if (article.banner) {
+      images.push({
+        url: `${BACKEND_URL}${article.banner}`,
+        type: 'banner'
+      });
+    }
+    
+    // Add gallery images
+    if (article.images) {
+      const galleryImages = article.images
+        .filter(img => img.type === 'gallery')
+        .map(img => ({
+          url: `${BACKEND_URL}${img.url}`,
+          type: 'gallery'
+        }));
+      images.push(...galleryImages);
+    }
+    
+    // Fallback to generated image if no images
+    if (images.length === 0) {
+      images.push({
+        url: `https://api.dicebear.com/9.x/shapes/svg?seed=${article.title}`,
+        type: 'fallback'
+      });
+    }
+    
+    return images;
   };
 
   // -------------------
@@ -146,10 +183,15 @@ function Article() {
     return <Loading />;
   }
 
+  const galleryImages = getGalleryImages();
+  const currentImage = galleryImages[selectedImage]?.url || galleryImages[0]?.url;
+
   return (
-    <div className="bg-background min-h-screen">
+    <div className="min-h-screen bg-background">
+
       <Fade cascade triggerOnce duration={500}>
-        <div className="mx-auto max-w-4xl px-6 py-12">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {/* Product Header */}
           <Header
             categories={article.categories}
             title={article.title}
@@ -161,9 +203,9 @@ function Article() {
             publishedDate={(article.updatedAt
               ? new Date(article.updatedAt)
               : new Date(article.createdAt)
-            ).toLocaleDateString("en-US", {
+            ).toLocaleDateString("es-AR", {
               year: "numeric",
-              month: "short",
+              month: "long",
               day: "numeric",
             })}
             onAddLike={handleAddLike}
@@ -175,19 +217,30 @@ function Article() {
             handleScrollToComments={handleScrollToComments}
             liked={article.liked}
             isLiking={isLiking}
+            // E-commerce specific props
+            price={article.price}
+            stock={article.stock}
+            sku={article.sku}
+            isBulky={article.isBulky}
+            shortDescription={article.shortDescription}
+            galleryImages={galleryImages}
+            selectedImage={selectedImage}
+            setSelectedImage={setSelectedImage}
+            quantity={quantity}
+            setQuantity={setQuantity}
+            handleAddToCart={handleAddToCart}
+            handleBuyNow={handleBuyNow}
           />
 
-          <div className="mt-16">
+          {/* Product Details */}
+          <div className="mt-12">
             <Content
               content={article.content}
-              coverImage={
-                article.banner === null
-                  ? `https://api.dicebear.com/9.x/shapes/svg?seed=${article.title}`
-                  : `${BACKEND_URL}${article.banner}`
-              }
+              coverImage={currentImage}
             />
           </div>
 
+          {/* Reviews Section */}
           <div className="mt-16" ref={commentSectionRef}>
             <CommentSection
               comments={comments}
